@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Caladium QR — prototype</title>
+  <style>
+    :root { --ink: #3a2030; --muted: #6f5560; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #f6f1f3; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+    #app { position: fixed; inset: 0; }
+    canvas { display: block; touch-action: none; }
+
+    .hud { position: fixed; inset: 0; pointer-events: none; padding: 26px;
+      display: flex; flex-direction: column; justify-content: space-between; }
+    .eyebrow { font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+    .title { font-size: 24px; font-weight: 650; color: var(--ink); letter-spacing: -0.01em; margin-top: 4px; }
+    .sub { font-size: 13px; color: var(--muted); max-width: 34ch; line-height: 1.45; margin-top: 6px; }
+
+    .bottom { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+    .controls { pointer-events: auto; display: flex; gap: 10px; align-items: center; }
+    input {
+      font: inherit; font-size: 14px; color: var(--ink); background: #fff;
+      border: 1px solid rgba(58,32,48,0.16); border-radius: 12px; padding: 10px 14px; width: 220px; outline: none;
+    }
+    input:focus { border-color: #c24d77; }
+    button {
+      font: inherit; font-size: 13px; font-weight: 600; color: var(--ink); background: rgba(255,255,255,0.7);
+      -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border: 1px solid rgba(58,32,48,0.14);
+      border-radius: 999px; padding: 10px 18px; cursor: pointer; transition: background 0.2s, transform 0.1s;
+    }
+    button:hover { background: #fff; }
+    button:active { transform: scale(0.97); }
+    .hint { font-size: 12px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div class="hud">
+    <div class="top">
+      <div class="eyebrow">caladium qr · prototype</div>
+      <div class="title">a caladium, grown from a link</div>
+      <div class="sub">the QR lays flat as soil; tap to raise a clump of heart leaves. the link seeds how many leaves, their angles, and the pink-green marbling. drag to orbit.</div>
+    </div>
+    <div class="bottom">
+      <span class="hint">drag to spin · tap to flatten / grow</span>
+      <div class="controls">
+        <input id="content" type="url" spellcheck="false" autocomplete="off" autocapitalize="off" />
+        <button id="toggle">flatten to QR</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="importmap">
+  { "imports": { "three": "https://esm.sh/three@0.160.0" } }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three'
+    import QRCode from 'https://esm.sh/qrcode@1.5.3'
+
+    const CUBE = 1
+    const DEFAULT_CONTENT = 'https://pynzhern.com'
+
+    // caladium-matched ground: a variegated pink/green QR tile (echoes the leaves),
+    // so the flat top-down reads as the same plant rather than brown soil
+    const CREAM = '#f3e7ea'
+    const PINK_GND = '#b34d72'
+    const GREEN_GND = '#4f7a3a'
+    // terracotta pot (own fading mesh so the flat QR stays clean; doesn't sway)
+    const POT_R = 6.2, POT_H = 6
+    const POT_BODY = new THREE.Color('#c0744d')
+    const POT_RIM = new THREE.Color('#d98f63')
+    const POT_SOIL = new THREE.Color('#4f3b2a')
+
+    // caladium variegation palette
+    const GREEN_EDGE = new THREE.Color('#3f6e34')
+    const GREEN_FLECK = new THREE.Color('#4f7a3a')
+    const VEIN = new THREE.Color('#f2dde6')
+    const PINK_DEEP = new THREE.Color('#c24d77')
+    const PINK_LIGHT = new THREE.Color('#e98cab')
+    const STALK = new THREE.Color('#5f7a44')
+
+    function generateQRMatrix(content) {
+      const data = QRCode.create(content || DEFAULT_CONTENT, { errorCorrectionLevel: 'M' })
+      const size = data.modules.size
+      const matrix = []
+      for (let y = 0; y < size; y++) {
+        const row = []
+        for (let x = 0; x < size; x++) row.push(data.modules.get(x, y) === 1)
+        matrix.push(row)
+      }
+      return matrix
+    }
+    function pseudoRandom(a, b, seed) {
+      const s = Math.sin(a * 127.1 + b * 311.7 + seed * 43.7) * 43758.5
+      return s - Math.floor(s)
+    }
+
+    // heart-leaf stencil: lobes + cleft at the base (v=0), point at the tip (v=1)
+    function heart(u, v) {
+      const x = u * 1.2
+      const y = 1.2 - v * 2.4
+      const a = x * x + y * y - 1
+      return a * a * a - x * x * y * y * y <= 0
+    }
+
+    const W = 6, H = 13 // half-width / height in mask cells
+    const tmp = new THREE.Color()
+
+    // p: { stalkH, reach, phi (outward lean of the blade), size, droop }
+    function buildLeaf(out, az, p, seed, qrBit) {
+      const ca = Math.cos(az), sa = Math.sin(az)
+      const cormTop = POT_H
+      const attachY = cormTop + p.stalkH
+      function place(lx, ly, lz, color) {
+        const wx = lx * ca + lz * sa
+        const wz = -lx * sa + lz * ca
+        out.push({ x: wx, y: Math.max(0.6, ly), z: wz, c: color })
+      }
+      // arching petiole: rises, then leans outward toward the leaf
+      const steps = Math.ceil(p.stalkH + p.reach) + 1
+      for (let k = 0; k <= steps; k++) {
+        const s = k / steps
+        place(0, cormTop + p.stalkH * Math.sin(s * Math.PI / 2), p.reach * s, STALK)
+      }
+      // blade runs outward+up along its spine at angle phi, drooping toward the tip
+      const spY = Math.sin(p.phi), spZ = Math.cos(p.phi)
+      for (let i = -W; i <= W; i++) {
+        for (let j = 0; j <= H; j++) {
+          const u = i / W, v = j / H
+          if (!heart(u, v)) continue
+          const e1 = !heart((i + 1) / W, v) || !heart((i - 1) / W, v) || !heart(u, (j + 1) / H) || !heart(u, (j - 1) / H)
+          const e2 = !heart((i + 2) / W, v) || !heart((i - 2) / W, v) || !heart(u, (j + 2) / H) || !heart(u, (j - 2) / H)
+          // classic fancy-leaf variegation: green margin → branching white veins → pink centre
+          let color
+          if (e1) color = GREEN_EDGE                  // crisp outer margin
+          else if (e2) color = GREEN_FLECK            // 2nd ring → bold green border
+          else {
+            const t = Math.abs(u)                     // 0 = midrib, 1 = margin
+            const fr = (function (x) { return x - Math.floor(x) })(t * 3.2 - v * 2.6) // vein phase
+            if (t < 0.09 || (fr < 0.12 && t < 0.82)) color = VEIN                       // midrib + branching veins
+            else if (t < 0.5) color = tmp.copy(PINK_DEEP).lerp(PINK_LIGHT, t / 0.5).clone()       // pink centre
+            else color = tmp.copy(GREEN_FLECK).lerp(GREEN_EDGE, (t - 0.5) / 0.5).clone()           // green toward margin
+          }
+          const jd = j * p.size
+          const lx = i * p.size
+          const ly = attachY + jd * spY - p.droop * jd * jd * 0.018
+          const lz = p.reach + jd * spZ
+          place(lx, ly, lz, color)
+        }
+      }
+    }
+
+    // terracotta pot + soil fill (pushed into the fading plant list, not the ground)
+    function buildPot(out) {
+      for (let ly = 0; ly < POT_H; ly++) {
+        const rOut = POT_R * (0.7 + 0.3 * ly / (POT_H - 1)) // taper: narrow base, wider rim
+        const rIn = rOut - 1.3
+        const rim = ly === POT_H - 1
+        const m = Math.ceil(POT_R)
+        for (let x = -m; x <= m; x++) {
+          for (let z = -m; z <= m; z++) {
+            const d = Math.hypot(x, z)
+            if (d <= rOut && d >= rIn) out.push({ x, y: ly, z, c: rim ? POT_RIM : POT_BODY })
+          }
+        }
+      }
+      const rFill = POT_R * 0.74 // soil surface inside the rim, where the plant emerges
+      const mf = Math.ceil(POT_R)
+      for (let x = -mf; x <= mf; x++) for (let z = -mf; z <= mf; z++) {
+        if (Math.hypot(x, z) <= rFill) out.push({ x, y: POT_H - 1, z, c: POT_SOIL })
+      }
+    }
+
+    function generatePlant(matrix) {
+      const gridSize = matrix.length
+      const ground = []
+      let dark = 0, total = 0
+
+      // variegated pink/green QR tile — dark modules pick pink or green, light = cream
+      for (let row = 0; row < gridSize; row++) {
+        for (let col = 0; col < gridSize; col++) {
+          const isDark = matrix[row][col]
+          total++; if (isDark) dark++
+          let c
+          if (!isDark) c = CREAM
+          else c = pseudoRandom(col, row, 2) < 0.72 ? PINK_GND : GREEN_GND
+          ground.push({ col, row, baseY: 0, c })
+        }
+      }
+
+      const pot = []
+      buildPot(pot)
+
+      const leaves = []
+      // fewer but bigger leaves, with more reach so they overhang the pot
+      const N = Math.max(5, Math.min(8, 5 + Math.round((dark / total) * 6)))
+      let maxY = 0, maxR = 0
+      for (let k = 0; k < N; k++) {
+        const qrBit = matrix[(k * 7) % gridSize][(k * 13) % gridSize] ? 1 : 0
+        const r1 = pseudoRandom(k, 1, qrBit + 1), r2 = pseudoRandom(k, 2, qrBit + 3)
+        const r3 = pseudoRandom(k, 5, qrBit + 7), r4 = pseudoRandom(k, 8, qrBit + 2)
+        const r5 = pseudoRandom(k, 11, qrBit + 9), r6 = pseudoRandom(k, 6, qrBit)
+        const az = (k / N) * Math.PI * 2 + (r1 - 0.5) * 1.0
+        const p = {
+          stalkH: 4 + r2 * 10,        // 4 .. 14 — varied petiole heights
+          reach: 3.5 + r3 * 7,        // 3.5 .. 10.5 — overhang past the pot rim
+          phi: -0.1 + r4 * 1.1,       // each leaf leans differently
+          size: 1.05 + r5 * 0.6,      // bigger hearts (1.05 .. 1.65)
+          droop: 0.4 + r6 * 0.9
+        }
+        buildLeaf(leaves, az, p, k * 31 + 5, qrBit)
+      }
+      for (const p of leaves) { if (p.y > maxY) maxY = p.y; const r = Math.hypot(p.x, p.z); if (r > maxR) maxR = r }
+      if (POT_R > maxR) maxR = POT_R
+
+      return { ground, pot, leaves, gridSize, maxY, maxR }
+    }
+
+    // ---- scene -------------------------------------------------------------
+    const app = document.getElementById('app')
+    const renderer = new THREE.WebGLRenderer({ antialias: true })
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.setSize(window.innerWidth, window.innerHeight)
+    renderer.outputColorSpace = THREE.SRGBColorSpace
+    app.appendChild(renderer.domElement)
+
+    const scene = new THREE.Scene()
+    scene.background = new THREE.Color('#f6f1f3')
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 8000)
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xb0a0a6, 1.05))
+    const sun = new THREE.DirectionalLight(0xffffff, 1.15)
+    sun.position.set(-10, 28, 12)
+    scene.add(sun)
+
+    const cubeGeo = new THREE.BoxGeometry(CUBE, CUBE, CUBE)
+    const groundMat = new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true })
+    const leafMat = new THREE.MeshStandardMaterial({ roughness: 0.85, flatShading: true, transparent: true, opacity: 1 })
+    const potMat = new THREE.MeshStandardMaterial({ roughness: 0.9, flatShading: true, transparent: true, opacity: 1 })
+
+    let groundMesh = null, leafMesh = null, potMesh = null
+    let gridSize = 0, plantMaxY = 0, plantMaxR = 0
+    const obj = new THREE.Object3D(), col = new THREE.Color()
+
+    // drifting petals (a touch of life; fade in with the plant)
+    const PETALS = 90
+    const petalGeo = new THREE.BufferGeometry()
+    const petalPos = new Float32Array(PETALS * 3)
+    const petalVel = new Float32Array(PETALS)
+    petalGeo.setAttribute('position', new THREE.BufferAttribute(petalPos, 3))
+    const petalMat = new THREE.PointsMaterial({ size: 5, sizeAttenuation: false, color: new THREE.Color('#e98cab'), transparent: true, opacity: 0, depthWrite: false })
+    const petals = new THREE.Points(petalGeo, petalMat)
+    scene.add(petals)
+    function seedPetals() {
+      const s = gridSize || 29
+      for (let i = 0; i < PETALS; i++) {
+        petalPos[i * 3] = (Math.random() - 0.5) * s
+        petalPos[i * 3 + 1] = Math.random() * (plantMaxY + 6)
+        petalPos[i * 3 + 2] = (Math.random() - 0.5) * s
+        petalVel[i] = 1.4 + Math.random() * 2.4
+      }
+      petalGeo.attributes.position.needsUpdate = true
+    }
+
+    function build(content) {
+      const data = generatePlant(generateQRMatrix(content))
+      gridSize = data.gridSize; plantMaxY = data.maxY; plantMaxR = data.maxR
+      const offset = (gridSize - 1) / 2
+
+      if (groundMesh) { scene.remove(groundMesh); groundMesh.dispose() }
+      if (leafMesh) { scene.remove(leafMesh); leafMesh.dispose() }
+      if (potMesh) { scene.remove(potMesh); potMesh.dispose() }
+
+      groundMesh = new THREE.InstancedMesh(cubeGeo, groundMat, data.ground.length)
+      for (let i = 0; i < data.ground.length; i++) {
+        const b = data.ground[i]
+        obj.position.set(b.col - offset, b.baseY + CUBE / 2, b.row - offset)
+        obj.updateMatrix(); groundMesh.setMatrixAt(i, obj.matrix)
+        col.set(b.c); groundMesh.setColorAt(i, col)
+      }
+      groundMesh.instanceMatrix.needsUpdate = true; groundMesh.instanceColor.needsUpdate = true
+      scene.add(groundMesh)
+
+      potMesh = new THREE.InstancedMesh(cubeGeo, potMat, data.pot.length)
+      for (let i = 0; i < data.pot.length; i++) {
+        const p = data.pot[i]
+        obj.position.set(p.x, p.y + CUBE / 2, p.z)
+        obj.updateMatrix(); potMesh.setMatrixAt(i, obj.matrix)
+        potMesh.setColorAt(i, p.c)
+      }
+      potMesh.instanceMatrix.needsUpdate = true; potMesh.instanceColor.needsUpdate = true
+      scene.add(potMesh)
+
+      leafMesh = new THREE.InstancedMesh(cubeGeo, leafMat, data.leaves.length)
+      for (let i = 0; i < data.leaves.length; i++) {
+        const p = data.leaves[i]
+        obj.position.set(p.x, p.y + CUBE / 2, p.z)
+        obj.updateMatrix(); leafMesh.setMatrixAt(i, obj.matrix)
+        leafMesh.setColorAt(i, p.c)
+      }
+      leafMesh.instanceMatrix.needsUpdate = true; leafMesh.instanceColor.needsUpdate = true
+      scene.add(leafMesh)
+
+      seedPetals()
+    }
+
+    // ---- camera: flat↔iso + drag orbit ------------------------------------
+    let t = 0, target = 1
+    let az = 0.7, el = 0.6
+    const pos = new THREE.Vector3(), tgt = new THREE.Vector3(), dir = new THREE.Vector3(), up = new THREE.Vector3()
+    const UP_FLAT = new THREE.Vector3(0, 0, -1), UP_ISO = new THREE.Vector3(0, 1, 0)
+    function easeInOut(x) { return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2 }
+
+    let last = performance.now()
+    function frame(now) {
+      const dt = Math.min(0.05, (now - last) / 1000); last = now
+
+      t += (target - t) * 0.10
+      if (Math.abs(target - t) < 0.0004) t = target
+      const e = easeInOut(t)
+
+      const w = window.innerWidth, h = window.innerHeight, aspect = w / h
+      const span = gridSize
+      const flatHalf = Math.max(span * 0.5, span / (2 * aspect)) * 1.14
+      const isoHalf = Math.max(span * 0.6, plantMaxR * 0.85, plantMaxY * 0.55) * 1.1
+      const halfH = flatHalf + (isoHalf - flatHalf) * e
+      camera.top = halfH; camera.bottom = -halfH; camera.left = -halfH * aspect; camera.right = halfH * aspect
+      camera.updateProjectionMatrix()
+
+      const elNow = (Math.PI / 2) * (1 - e) + el * e
+      const azNow = az * e
+      dir.set(Math.cos(elNow) * Math.sin(azNow), Math.sin(elNow), Math.cos(elNow) * Math.cos(azNow))
+      up.copy(UP_FLAT).lerp(UP_ISO, e).normalize()
+      tgt.set(0, plantMaxY * 0.4 * e, 0)
+      pos.copy(dir).multiplyScalar(span * 6).add(tgt)
+      camera.position.copy(pos); camera.up.copy(up); camera.lookAt(tgt)
+
+      const o = e <= 0.2 ? 0 : Math.min(1, (e - 0.2) / 0.55)
+      const op = o * o * (3 - 2 * o)
+      leafMat.opacity = op; potMat.opacity = op
+      petalMat.opacity = e * 0.65
+
+      // gentle sway on the leaves only (pot stays put)
+      if (leafMesh) {
+        const tm = now / 1000
+        leafMesh.rotation.z = Math.sin(tm * 0.9) * 0.022 * e
+        leafMesh.rotation.x = Math.cos(tm * 0.7) * 0.014 * e
+      }
+      // petals drift down and recycle to the top
+      if (e > 0.05) {
+        const s = gridSize || 29
+        for (let i = 0; i < PETALS; i++) {
+          petalPos[i * 3 + 1] -= petalVel[i] * dt
+          petalPos[i * 3] += Math.sin(now / 1000 * 1.3 + i) * 0.5 * dt
+          if (petalPos[i * 3 + 1] < 0) {
+            petalPos[i * 3] = (Math.random() - 0.5) * s
+            petalPos[i * 3 + 1] = plantMaxY + Math.random() * 5
+            petalPos[i * 3 + 2] = (Math.random() - 0.5) * s
+          }
+        }
+        petalGeo.attributes.position.needsUpdate = true
+      }
+
+      renderer.render(scene, camera)
+      requestAnimationFrame(frame)
+    }
+
+    // ---- interaction -------------------------------------------------------
+    const btn = document.getElementById('toggle')
+    const input = document.getElementById('content')
+    input.value = DEFAULT_CONTENT
+    function toggle() {
+      target = target === 0 ? 1 : 0
+      btn.textContent = target === 1 ? 'flatten to QR' : 'grow caladium'
+    }
+    btn.addEventListener('click', toggle)
+
+    let dragging = false, lastX = 0, lastY = 0, moved = 0
+    const cv = renderer.domElement
+    cv.addEventListener('pointerdown', function (ev) { dragging = true; lastX = ev.clientX; lastY = ev.clientY; moved = 0; cv.setPointerCapture(ev.pointerId) })
+    cv.addEventListener('pointermove', function (ev) {
+      if (!dragging) return
+      const dx = ev.clientX - lastX, dy = ev.clientY - lastY
+      lastX = ev.clientX; lastY = ev.clientY; moved += Math.abs(dx) + Math.abs(dy)
+      az -= dx * 0.006
+      el = Math.max(0.2, Math.min(1.45, el + dy * 0.005))
+    })
+    cv.addEventListener('pointerup', function () { dragging = false; if (moved < 6) toggle() })
+
+    let debounce = null
+    input.addEventListener('input', function () { clearTimeout(debounce); debounce = setTimeout(function () { build(input.value) }, 250) })
+    window.addEventListener('resize', function () { renderer.setSize(window.innerWidth, window.innerHeight) })
+
+    build(DEFAULT_CONTENT)
+    requestAnimationFrame(frame)
+  </script>
+</body>
+</html>

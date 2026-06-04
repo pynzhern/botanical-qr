@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pine Tree QR — variant comparison</title>
+  <style>
+    :root { --ink: #25322b; --muted: #5e6f64; --line: rgba(37,50,43,0.10); }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: #f4f6f4; overflow: hidden; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      display: flex; flex-direction: column; height: 100%; }
+
+    header { padding: 22px 26px 14px; display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; }
+    .eyebrow { font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+    .title { font-size: 22px; font-weight: 650; color: var(--ink); letter-spacing: -0.01em; margin-top: 4px; }
+    .controls { display: flex; gap: 10px; align-items: center; }
+    input {
+      font: inherit; font-size: 14px; color: var(--ink); background: #fff;
+      border: 1px solid rgba(37,50,43,0.14); border-radius: 12px; padding: 10px 14px; width: 240px; outline: none;
+    }
+    input:focus { border-color: #4a7c4e; }
+    button {
+      font: inherit; font-size: 13px; font-weight: 600; color: var(--ink); background: #fff;
+      border: 1px solid rgba(37,50,43,0.14); border-radius: 999px; padding: 10px 18px; cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+    button:hover { background: #eef1ee; }
+    button:active { transform: scale(0.97); }
+
+    .grid { flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); min-height: 0; }
+    .panel { position: relative; background: #f4f6f4; min-height: 0; }
+    .panel canvas { display: block; width: 100%; height: 100%; }
+    .label { position: absolute; left: 16px; top: 14px; pointer-events: none; }
+    .label .name { font-size: 14px; font-weight: 650; color: var(--ink); }
+    .label .meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .hint { position: absolute; left: 16px; bottom: 12px; font-size: 11px; color: var(--muted); pointer-events: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <div class="eyebrow">pine tree qr · variant comparison</div>
+      <div class="title">single cone vs tiered fir vs snow</div>
+    </div>
+    <div class="controls">
+      <input id="content" type="url" spellcheck="false" autocomplete="off" autocapitalize="off" />
+      <button id="toggle">flatten to QR</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="panel">
+      <canvas id="c0"></canvas>
+      <div class="label"><div class="name">1 · current</div><div class="meta">single cone · h≈28</div></div>
+      <div class="hint">click any panel to toggle all</div>
+    </div>
+    <div class="panel">
+      <canvas id="c1"></canvas>
+      <div class="label"><div class="name">2 · tiered + taller</div><div class="meta">4-tier fir · h≈37</div></div>
+    </div>
+    <div class="panel">
+      <canvas id="c2"></canvas>
+      <div class="label"><div class="name">3 · tiered snow</div><div class="meta">4-tier · frosted tips</div></div>
+    </div>
+  </div>
+
+  <script type="importmap">
+  { "imports": { "three": "https://esm.sh/three@0.160.0" } }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three'
+    import QRCode from 'https://esm.sh/qrcode@1.5.3'
+
+    const CUBE = 1
+    const TRUNK_RADIUS = 2.5
+    const CANOPY_OUTER_RADIUS_FACTOR = 0.46
+    const DEFAULT_CONTENT = 'https://pynzhern.com'
+
+    const BlockType = { Dirt: 0, Trunk: 2, Grass: 3, Litter: 4 }
+
+    // forest-floor + snow palettes — dark module colours stay clearly darker than the
+    // light "dirt" so the flat ground layer reads as a scannable QR
+    const GROUND = {
+      forest: { 0: '#dac9a1', 2: '#5e4329', 3: '#5f7d4a', 4: '#6b5a3a' },
+      snow:   { 0: '#eef2f4', 2: '#5a4636', 3: '#7d8a86', 4: '#6e7672' }
+    }
+    const PINE = {
+      forest: { low: new THREE.Color('#27512f'), high: new THREE.Color('#3f7a44') },
+      snow:   { low: new THREE.Color('#2f5a37'), high: new THREE.Color('#4a8a50') }
+    }
+    const SNOW_CAP = new THREE.Color('#eef3f4')
+
+    function generateQRMatrix(content) {
+      const data = QRCode.create(content || DEFAULT_CONTENT, { errorCorrectionLevel: 'M' })
+      const size = data.modules.size
+      const matrix = []
+      for (let y = 0; y < size; y++) {
+        const row = []
+        for (let x = 0; x < size; x++) row.push(data.modules.get(x, y) === 1)
+        matrix.push(row)
+      }
+      return matrix
+    }
+
+    function pseudoRandom(col, row, seed) {
+      const s = Math.sin(col * 127.1 + row * 311.7 + seed * 43.7) * 43758.5
+      return s - Math.floor(s)
+    }
+
+    // single linear cone (current build)
+    function canopyCone(d, outer, layers, col, row) {
+      const t = 1 - d / outer
+      const jitter = pseudoRandom(col, row, 500) - 0.5
+      const n = Math.max(1, Math.round(layers * t + jitter))
+      const out = []
+      for (let L = 0; L < n; L++) out.push(L)
+      return out
+    }
+
+    // tiered notched fir: each tier flares out at its base then tapers; top tier points
+    function canopyTiered(d, outer, tiers, lpt) {
+      const total = tiers * lpt
+      const tierShrink = 0.20
+      const tierTaper = 0.46
+      const out = []
+      for (let L = 0; L < total; L++) {
+        const tier = Math.floor(L / lpt)
+        const p = (L - tier * lpt) / lpt              // 0 at tier base → ~1 at tier top
+        const taper = tier === tiers - 1 ? 0.12 : tierTaper // sharp tip on the last tier
+        const r = outer * (1 - tier * tierShrink) * (1 - p * (1 - taper))
+        if (d <= r) out.push(L)
+      }
+      return out
+    }
+
+    function generateBlocks(matrix, cfg) {
+      const gridSize = matrix.length
+      const cx = gridSize / 2, cy = gridSize / 2
+      const outer = gridSize * CANOPY_OUTER_RADIUS_FACTOR
+      const canopyBase = cfg.trunkLayers * CUBE
+      const ground = []  // dirt / grass / litter / trunk  (always visible)
+      const canopy = []  // foliage (fades out when flattened)
+
+      for (let row = 0; row < gridSize; row++) {
+        for (let col = 0; col < gridSize; col++) {
+          const dark = matrix[row][col]
+          const d = Math.hypot(col - cx, row - cy)
+          let type
+          if (!dark) type = BlockType.Dirt
+          else if (d < TRUNK_RADIUS) type = BlockType.Trunk
+          else if (d >= outer) type = BlockType.Grass
+          else type = BlockType.Litter
+          ground.push({ col, row, baseY: 0, type })
+
+          if (dark && d < TRUNK_RADIUS) {
+            for (let L = 1; L < cfg.trunkLayers; L++) ground.push({ col, row, baseY: L * CUBE, type: BlockType.Trunk })
+          }
+        }
+      }
+
+      for (let row = 0; row < gridSize; row++) {
+        for (let col = 0; col < gridSize; col++) {
+          if (!matrix[row][col]) continue
+          const d = Math.hypot(col - cx, row - cy)
+          if (d >= outer) continue
+          const layers = cfg.canopy === 'tiered'
+            ? canopyTiered(d, outer, cfg.tiers, cfg.layersPerTier)
+            : canopyCone(d, outer, cfg.coneLayers, col, row)
+          if (!layers.length) continue
+          const maxL = layers[layers.length - 1]
+          const denom = Math.max(1, maxL)
+          for (const L of layers) {
+            canopy.push({ col, row, baseY: canopyBase + L * CUBE, shade: L / denom, frost: L === maxL })
+          }
+        }
+      }
+
+      const totalLayers = cfg.canopy === 'tiered' ? cfg.tiers * cfg.layersPerTier : cfg.coneLayers
+      return { ground, canopy, gridSize, totalHeight: cfg.trunkLayers + totalLayers }
+    }
+
+    // ---- one independent panel --------------------------------------------
+    function createPanel(canvas, cfg) {
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true })
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+      renderer.outputColorSpace = THREE.SRGBColorSpace
+
+      const scene = new THREE.Scene()
+      const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 6000)
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x9aae9a, 1.0))
+      const sun = new THREE.DirectionalLight(0xffffff, 1.2)
+      sun.position.set(-12, 30, 10)
+      scene.add(sun)
+
+      const cubeGeo = new THREE.BoxGeometry(CUBE, CUBE, CUBE)
+      const groundMat = new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true })
+      const canopyMat = new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true, transparent: true, opacity: 1 })
+
+      let groundMesh = null, canopyMesh = null
+      let gridSize = 0, totalHeight = 0
+      const obj = new THREE.Object3D(), col = new THREE.Color()
+      const groundCols = GROUND[cfg.snow ? 'snow' : 'forest']
+      const pine = PINE[cfg.snow ? 'snow' : 'forest']
+
+      function build(content) {
+        const data = generateBlocks(generateQRMatrix(content), cfg)
+        gridSize = data.gridSize
+        totalHeight = data.totalHeight
+        const offset = (gridSize - 1) / 2
+
+        if (groundMesh) { scene.remove(groundMesh); groundMesh.dispose() }
+        if (canopyMesh) { scene.remove(canopyMesh); canopyMesh.dispose() }
+
+        groundMesh = new THREE.InstancedMesh(cubeGeo, groundMat, data.ground.length)
+        for (let i = 0; i < data.ground.length; i++) {
+          const b = data.ground[i]
+          obj.position.set(b.col - offset, b.baseY + CUBE / 2, b.row - offset)
+          obj.updateMatrix(); groundMesh.setMatrixAt(i, obj.matrix)
+          col.set(groundCols[b.type]); groundMesh.setColorAt(i, col)
+        }
+        groundMesh.instanceMatrix.needsUpdate = true; groundMesh.instanceColor.needsUpdate = true
+        scene.add(groundMesh)
+
+        canopyMesh = new THREE.InstancedMesh(cubeGeo, canopyMat, data.canopy.length)
+        for (let i = 0; i < data.canopy.length; i++) {
+          const b = data.canopy[i]
+          obj.position.set(b.col - offset, b.baseY + CUBE / 2, b.row - offset)
+          obj.updateMatrix(); canopyMesh.setMatrixAt(i, obj.matrix)
+          if (cfg.snow && b.frost) col.copy(SNOW_CAP)
+          else col.copy(pine.low).lerp(pine.high, b.shade)
+          canopyMesh.setColorAt(i, col)
+        }
+        canopyMesh.instanceMatrix.needsUpdate = true; canopyMesh.instanceColor.needsUpdate = true
+        scene.add(canopyMesh)
+      }
+
+      const dir = new THREE.Vector3(), up = new THREE.Vector3(), pos = new THREE.Vector3(), tgt = new THREE.Vector3()
+      const DIR_FLAT = new THREE.Vector3(0, 1, 0.0001).normalize()
+      const DIR_ISO = new THREE.Vector3(0.95, 1.05, 1.3).normalize()
+      const UP_FLAT = new THREE.Vector3(0, 0, -1), UP_ISO = new THREE.Vector3(0, 1, 0)
+
+      function render(e) {
+        const w = canvas.clientWidth, h = canvas.clientHeight
+        if (canvas.width !== w * renderer.getPixelRatio() || canvas.height !== h * renderer.getPixelRatio()) {
+          renderer.setSize(w, h, false)
+        }
+        const aspect = w / h
+        const span = gridSize
+
+        const flatHalf = Math.max(span * 0.5, span / (2 * aspect)) * 1.14
+        const isoHalf = Math.max(span * 0.62, totalHeight * 0.46) * 1.06
+        const halfH = flatHalf + (isoHalf - flatHalf) * e
+        camera.top = halfH; camera.bottom = -halfH
+        camera.left = -halfH * aspect; camera.right = halfH * aspect
+        camera.updateProjectionMatrix()
+
+        dir.copy(DIR_FLAT).lerp(DIR_ISO, e).normalize()
+        up.copy(UP_FLAT).lerp(UP_ISO, e).normalize()
+        tgt.set(0, totalHeight * 0.42 * e, 0)
+        pos.copy(dir).multiplyScalar(span * 5).add(tgt)
+        camera.position.copy(pos); camera.up.copy(up); camera.lookAt(tgt)
+
+        // canopy materialises as the tree tilts up; ground QR carries the flat state
+        const o = e <= 0.2 ? 0 : Math.min(1, (e - 0.2) / 0.55)
+        canopyMat.opacity = o * o * (3 - 2 * o)
+
+        renderer.render(scene, camera)
+      }
+
+      return { build, render }
+    }
+
+    // ---- shared state across the three panels ------------------------------
+    const configs = [
+      { canopy: 'cone', trunkLayers: 12, coneLayers: 16, snow: false },
+      { canopy: 'tiered', trunkLayers: 13, tiers: 4, layersPerTier: 6, snow: false },
+      { canopy: 'tiered', trunkLayers: 13, tiers: 4, layersPerTier: 6, snow: true }
+    ]
+    const panels = configs.map((cfg, i) => createPanel(document.getElementById('c' + i), cfg))
+
+    let t = 0, target = 1
+    function easeInOut(x) { return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2 }
+    function loop() {
+      t += (target - t) * 0.10
+      if (Math.abs(target - t) < 0.0004) t = target
+      const e = easeInOut(t)
+      for (const p of panels) p.render(e)
+      requestAnimationFrame(loop)
+    }
+
+    const btn = document.getElementById('toggle')
+    const input = document.getElementById('content')
+    input.value = DEFAULT_CONTENT
+    function toggle() {
+      target = target === 0 ? 1 : 0
+      btn.textContent = target === 1 ? 'flatten to QR' : 'grow pines'
+    }
+    btn.addEventListener('click', toggle)
+    document.querySelectorAll('.panel canvas').forEach(c => c.addEventListener('click', toggle))
+
+    let debounce = null
+    input.addEventListener('input', function () {
+      clearTimeout(debounce)
+      debounce = setTimeout(function () { panels.forEach(p => p.build(input.value)) }, 250)
+    })
+
+    panels.forEach(p => p.build(DEFAULT_CONTENT))
+    loop()
+  </script>
+</body>
+</html>
