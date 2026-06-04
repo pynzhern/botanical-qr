@@ -78,11 +78,11 @@
     const GREEN_PALE = new THREE.Color('#d2e2cd')  // pale sage
     const BG = new THREE.Color('#f6f1f3')
     // organic botanical variegation for the OCCLUDED under-leaves (not the QR — seen only from the side in 3D)
-    const BOT_EDGE = new THREE.Color('#3f6e34')
-    const BOT_GREEN = new THREE.Color('#5f8f48')
-    const BOT_VEIN = new THREE.Color('#f3e6ec')
-    const BOT_PINKD = new THREE.Color('#bf4f78')
-    const BOT_PINKL = new THREE.Color('#ec90af')
+    // unified caladium variegation: the SAME structure on every leaf (midrib → blade → vein → green band →
+    // margin). the QR is encoded only as light/dark on the exposed top cells, within that structure.
+    const ZD = { midrib: new THREE.Color('#8a2f54'), blade: new THREE.Color('#b34d72'), vein: new THREE.Color('#b3607f'), gband: new THREE.Color('#4f7a3a'), margin: new THREE.Color('#3f6e34') } // dark module
+    const ZL = { midrib: new THREE.Color('#e2a8c2'), blade: new THREE.Color('#eec6d6'), vein: new THREE.Color('#f5ebef'), gband: new THREE.Color('#cfe0c8'), margin: new THREE.Color('#bcd0b3') } // light module
+    const ZN = { midrib: new THREE.Color('#9c3d63'), blade: new THREE.Color('#c9608a'), vein: new THREE.Color('#f3e6ec'), gband: new THREE.Color('#5f8f48'), margin: new THREE.Color('#3f6e34') } // occluded / natural
     // terracotta pot (fades on flatten so the flat QR centre is the plant, not the pot)
     const POT_R = 6.2, POT_H = 9
     const POT_BODY = new THREE.Color('#c0744d')
@@ -119,21 +119,24 @@
       return matrix[r][c] ? 1 : 0
     }
     // classic caladium markings from leaf-local position (green margin → white veins → pink centre)
-    function leafBotanical(u, v, e1, e2) {
-      if (e1 || e2) return BOT_EDGE
-      const t = Math.abs(u), fr = frac(t * 3.2 - v * 2.6)
-      if (t < 0.09 || (fr < 0.12 && t < 0.82)) return BOT_VEIN
-      if (t < 0.5) return BOT_PINKD.clone().lerp(BOT_PINKL, t / 0.5)
-      return BOT_GREEN
+    // which variegation zone a leaf cell is in — same structure on every leaf (magenta midrib →
+    // pink blade → radiating veins → green band → dark green margin)
+    function leafZone(u, v, e1, e2) {
+      if (e1 || e2) return 'margin'
+      const t = Math.abs(u)
+      if (t < 0.07) return 'midrib'
+      if (t > 0.68) return 'gband'
+      if (frac(t * 4 - v * 1.6) < 0.09) return 'vein'
+      return 'blade'
     }
 
     // a leaf voxel locked to its own (col,row): tilt comes from per-cell height, never sideways.
     // on-tile cells carry the QR (dark/pale by module); overhang cells are pale → light quiet zone
     // on-tile cells stored with metadata (coloured later: topmost→QR, occluded→botanical); off-tile overhang fades
-    function pushCell(onOut, offOut, col, row, H, offset, pink, bot, matrix, gridSize) {
+    function pushCell(onOut, offOut, col, row, H, offset, zone, gridSize) {
       const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
-      if (onTile) onOut.push({ col, row, H, pink, bot })
-      else offOut.push({ x: col - offset, y: H, z: row - offset, c: bot })
+      if (onTile) onOut.push({ col, row, H, zone })
+      else offOut.push({ x: col - offset, y: H, z: row - offset, c: ZN[zone] })
     }
     // stalk voxel snapped to the grid; pre-coloured by module so it's QR-correct wherever exposed
     function pushStalk(onOut, offOut, wx, wy, wz, matrix, offset, gridSize) {
@@ -170,10 +173,9 @@
           if (!heart(u, v)) continue
           const e1 = !heart(u + du, v) || !heart(u - du, v) || !heart(u, v + dv) || !heart(u, v - dv)
           const e2 = !heart(u + 2 * du, v) || !heart(u - 2 * du, v) || !heart(u, v + 2 * dv) || !heart(u, v - 2 * dv)
-          const pink = !e1 && Math.abs(u) < 0.5
-          const bot = leafBotanical(u, v, e1, e2)
-          const H = baseH + v * rise - droop * v * v - cup * u * u   // arch up the spine + cup across the width (3D leaf, not a flat plane)
-          pushCell(onOut, offOut, col, row, Math.max(POT_H, H), offset, pink, bot, matrix, gridSize)
+          const zone = leafZone(u, v, e1, e2)
+          const H = baseH + v * rise - droop * v * v - cup * u * u   // arch up the spine + cup across the width (3D leaf)
+          pushCell(onOut, offOut, col, row, Math.max(POT_H, H), offset, zone, gridSize)
           if (H > lmaxY) lmaxY = H
         }
       }
@@ -221,22 +223,25 @@
       // don't intersect, all petioles run to the middle, vertical space spreads them. lower leaves get
       // occluded from above (kept botanical); the exposed top leaves carry the QR. thin (1 voxel) each.
       const sc = gridSize / 33
-      const N = Math.max(9, Math.min(12, 9 + Math.round((dark / total) * 3)))
+      const N = Math.max(8, Math.min(10, 8 + Math.round((dark / total) * 2)))
       const GOLDEN = 2.39996323
+      const MAX_TILT = 1.4 // tan(~55°) — petioles never tilt flatter than this
       let maxY = 0, maxR = 0
       for (let k = 0; k < N; k++) {
         const qrBit = matrix[(k * 7) % gridSize][(k * 13) % gridSize] ? 1 : 0
-        const r3 = pseudoRandom(k, 5, qrBit + 7), r4 = pseudoRandom(k, 8, qrBit + 2)
-        const r5 = pseudoRandom(k, 11, qrBit + 9), r6 = pseudoRandom(k, 13, qrBit)
+        const r2 = pseudoRandom(k, 2, qrBit + 3), r3 = pseudoRandom(k, 5, qrBit + 7)
+        const r4 = pseudoRandom(k, 8, qrBit + 2), r5 = pseudoRandom(k, 11, qrBit + 9), r6 = pseudoRandom(k, 13, qrBit)
         const t = N > 1 ? k / (N - 1) : 0
         const az = k * GOLDEN
-        const rc = (0.8 + r3 * 1.2) * sc                       // base near the centre → petiole connects to the middle
+        const rc = (2.5 + r3 * 3.5) * sc                       // petiole tilts out → leaves extend horizontally
+        const climbH = (3 + t * 30 + r5 * 3) * sc             // tall + EVEN vertical spread → leaves distribute up the stem, no top bunching
+        const baseH = POT_H + Math.max(climbH, rc / MAX_TILT)  // cap petiole tilt; pushes far-out leaves up
         const leaf = {
           cx: Math.cos(az) * rc, cz: Math.sin(az) * rc, az,
-          size: (8 + r4 * 4) * sc,                             // bigger leaves — use the high-res tile's space
-          baseH: POT_H + 3 + (t * 24 + r5 * 2) * sc,           // climb the stem → vertical spacing, no intersecting
-          rise: (12 + r6 * 6) * sc,
-          droop: (5 + r4 * 4) * sc,
+          size: (5 + t * 2.5 + r2 * 3.5) * sc,                 // gentle size trend + variation (no oversized top leaves)
+          baseH,
+          rise: (8 + r6 * 5) * sc,
+          droop: (3 + r4 * 3) * sc,                            // gentle nod so the lowest leaf looks natural
           cup: (3 + r3 * 2.5) * sc
         }
         const ly = buildLeaf(leaves, overhang, leaf, matrix, offset, gridSize)
@@ -257,10 +262,9 @@
         v.x = v.col - offset; v.z = v.row - offset; v.y = v.H
         if (v.fixed) continue // stalks already module-coloured
         if (v.H >= cellTop.get(v.col * 4096 + v.row) - 0.001) {
-          const dark = matrix[v.row][v.col]
-          v.c = dark ? (v.pink ? PINK_DARK : GREEN_DARK) : (v.pink ? PINK_PALE : GREEN_PALE)
+          v.c = matrix[v.row][v.col] ? ZD[v.zone] : ZL[v.zone]   // exposed → QR via light/dark, variegation hue kept
         } else {
-          v.c = v.bot // hidden from above → free to be botanical
+          v.c = ZN[v.zone]                                        // occluded → natural variegation
         }
       }
 
