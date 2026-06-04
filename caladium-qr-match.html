@@ -65,6 +65,7 @@
 
     // QR palette — leaves and ground share it so the top-down is seamless
     const CREAM = '#f3e7ea'
+    const FLOOR_DARK = '#566159'   // single monotone floor tone — neutral, lets the leaves carry the colour
     const PINK_GND = '#b34d72'
     const GREEN_GND = '#4f7a3a'
     const BROWN_GND = '#6b4a32'   // dark brown is low-luminance → valid for DARK modules
@@ -89,7 +90,10 @@
     const POT_SOIL = new THREE.Color('#4f3b2a')
 
     function generateQRMatrix(content) {
-      const data = QRCode.create(content || DEFAULT_CONTENT, { errorCorrectionLevel: 'H' })
+      // default to a higher version → more pixels to play with; fall back to auto if the data is too big
+      let data
+      try { data = QRCode.create(content || DEFAULT_CONTENT, { errorCorrectionLevel: 'H', version: 9 }) }
+      catch (e) { data = QRCode.create(content || DEFAULT_CONTENT, { errorCorrectionLevel: 'H' }) }
       const size = data.modules.size
       const matrix = []
       for (let y = 0; y < size; y++) {
@@ -203,8 +207,7 @@
           const isDark = matrix[row][col]
           total++; if (isDark) dark++
           let c
-          if (!isDark) c = CREAM
-          else c = pseudoRandom(col, row, 2) < 0.72 ? PINK_GND : GREEN_GND
+          c = isDark ? FLOOR_DARK : CREAM // monotone floor
           ground.push({ col, row, baseY: 0, c })
         }
       }
@@ -214,23 +217,27 @@
 
       const leaves = []
       const overhang = []
-      // ordered two-tier rosette: even fan (no clustering), inner leaves tall+upright, outer low+splayed —
-      // this stops leaves crossing through each other regardless of the URL's random seed
-      const N = Math.max(9, Math.min(11, 9 + Math.round((dark / total) * 2)))
+      // climbing spiral (golden angle): each leaf at its own height + angle up a central stem → leaves
+      // don't intersect, all petioles run to the middle, vertical space spreads them. lower leaves get
+      // occluded from above (kept botanical); the exposed top leaves carry the QR. thin (1 voxel) each.
+      const sc = gridSize / 33
+      const N = Math.max(9, Math.min(12, 9 + Math.round((dark / total) * 3)))
+      const GOLDEN = 2.39996323
       let maxY = 0, maxR = 0
       for (let k = 0; k < N; k++) {
         const qrBit = matrix[(k * 7) % gridSize][(k * 13) % gridSize] ? 1 : 0
-        const r2 = pseudoRandom(k, 2, qrBit + 3), r3 = pseudoRandom(k, 5, qrBit + 7)
-        const r4 = pseudoRandom(k, 8, qrBit + 2), r5 = pseudoRandom(k, 11, qrBit + 9), r6 = pseudoRandom(k, 13, qrBit)
-        const az = (k / N) * Math.PI * 2 + (r2 - 0.5) * 0.22  // even fan, light jitter
-        const rc = 1.5 + r3 * 4.5                             // continuous spread (no fixed rings)
+        const r3 = pseudoRandom(k, 5, qrBit + 7), r4 = pseudoRandom(k, 8, qrBit + 2)
+        const r5 = pseudoRandom(k, 11, qrBit + 9), r6 = pseudoRandom(k, 13, qrBit)
+        const t = N > 1 ? k / (N - 1) : 0
+        const az = k * GOLDEN
+        const rc = (0.8 + r3 * 1.2) * sc                       // base near the centre → petiole connects to the middle
         const leaf = {
           cx: Math.cos(az) * rc, cz: Math.sin(az) * rc, az,
-          size: 5.5 + r4 * 3,
-          baseH: 15 + (6 - rc) * 1.0 + r5 * 6,  // mild inner-higher trend + real randomness (breaks flat tiers)
-          rise: 14 + r6 * 7,                    // more upright arch
-          droop: 5 + r4 * 4,
-          cup: 2.5 + r3 * 3                     // curve each leaf down at the edges → 3D, no flat-disc tiling
+          size: (8 + r4 * 4) * sc,                             // bigger leaves — use the high-res tile's space
+          baseH: POT_H + 3 + (t * 24 + r5 * 2) * sc,           // climb the stem → vertical spacing, no intersecting
+          rise: (12 + r6 * 6) * sc,
+          droop: (5 + r4 * 4) * sc,
+          cup: (3 + r3 * 2.5) * sc
         }
         const ly = buildLeaf(leaves, overhang, leaf, matrix, offset, gridSize)
         if (ly > maxY) maxY = ly
