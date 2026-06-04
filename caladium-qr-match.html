@@ -142,7 +142,7 @@
     // grid-aligned heart leaf: one voxel per covered cell. it ARCHES (rise then nod over) by
     // shaping each cell's HEIGHT — never moving it sideways — so it stays locked to the QR.
     function buildLeaf(onOut, offOut, leaf, matrix, offset, gridSize) {
-      const { cx, cz, az, size, baseH, rise, droop } = leaf
+      const { cx, cz, az, size, baseH, rise, droop, cup } = leaf
       const ca = Math.cos(az), sa = Math.sin(az)
       const du = 1 / size, dv = 1 / (size * 1.7)
       const ext = Math.ceil(size * 2.4)
@@ -168,7 +168,7 @@
           const e2 = !heart(u + 2 * du, v) || !heart(u - 2 * du, v) || !heart(u, v + 2 * dv) || !heart(u, v - 2 * dv)
           const pink = !e1 && Math.abs(u) < 0.5
           const bot = leafBotanical(u, v, e1, e2)
-          const H = baseH + v * rise - droop * v * v   // arch: rises, then the tip nods over (v4-like)
+          const H = baseH + v * rise - droop * v * v - cup * u * u   // arch up the spine + cup across the width (3D leaf, not a flat plane)
           pushCell(onOut, offOut, col, row, Math.max(POT_H, H), offset, pink, bot, matrix, gridSize)
           if (H > lmaxY) lmaxY = H
         }
@@ -214,21 +214,23 @@
 
       const leaves = []
       const overhang = []
-      const N = Math.max(8, Math.min(12, 8 + Math.round((dark / total) * 5)))
+      // ordered two-tier rosette: even fan (no clustering), inner leaves tall+upright, outer low+splayed —
+      // this stops leaves crossing through each other regardless of the URL's random seed
+      const N = Math.max(9, Math.min(11, 9 + Math.round((dark / total) * 2)))
       let maxY = 0, maxR = 0
       for (let k = 0; k < N; k++) {
         const qrBit = matrix[(k * 7) % gridSize][(k * 13) % gridSize] ? 1 : 0
-        const r1 = pseudoRandom(k, 1, qrBit + 1), r2 = pseudoRandom(k, 2, qrBit + 3)
-        const r3 = pseudoRandom(k, 5, qrBit + 7), r4 = pseudoRandom(k, 8, qrBit + 2)
-        const r5 = pseudoRandom(k, 11, qrBit + 9), r6 = pseudoRandom(k, 13, qrBit)
-        const az = (k / N) * Math.PI * 2 + (r1 - 0.5) * 0.9
-        const rc = 1 + r2 * 5                       // more spread
+        const r2 = pseudoRandom(k, 2, qrBit + 3), r3 = pseudoRandom(k, 5, qrBit + 7)
+        const r4 = pseudoRandom(k, 8, qrBit + 2), r5 = pseudoRandom(k, 11, qrBit + 9), r6 = pseudoRandom(k, 13, qrBit)
+        const az = (k / N) * Math.PI * 2 + (r2 - 0.5) * 0.22  // even fan, light jitter
+        const rc = 1.5 + r3 * 4.5                             // continuous spread (no fixed rings)
         const leaf = {
           cx: Math.cos(az) * rc, cz: Math.sin(az) * rc, az,
-          size: 5.5 + r3 * 5,        // big leaves, free to overhang
-          baseH: 16 + r4 * 14,       // taller (16 .. 30)
-          rise: 12 + r5 * 14,        // steep v4-style arch
-          droop: 4 + r6 * 8          // tip nods over
+          size: 5.5 + r4 * 3,
+          baseH: 15 + (6 - rc) * 1.0 + r5 * 6,  // mild inner-higher trend + real randomness (breaks flat tiers)
+          rise: 14 + r6 * 7,                    // more upright arch
+          droop: 5 + r4 * 4,
+          cup: 2.5 + r3 * 3                     // curve each leaf down at the edges → 3D, no flat-disc tiling
         }
         const ly = buildLeaf(leaves, overhang, leaf, matrix, offset, gridSize)
         if (ly > maxY) maxY = ly
@@ -351,7 +353,8 @@
         obj.updateMatrix(); overhangMesh.setMatrixAt(i, obj.matrix)
         overhangMesh.setColorAt(i, p.c)
       }
-      overhangMesh.instanceMatrix.needsUpdate = true; overhangMesh.instanceColor.needsUpdate = true
+      overhangMesh.instanceMatrix.needsUpdate = true
+      if (overhangMesh.instanceColor) overhangMesh.instanceColor.needsUpdate = true // null when no overhang
       scene.add(overhangMesh)
 
       seedPetals()
