@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pine Tree QR — tiered, matched</title>
+  <style>
+    :root { --ink: #25322b; --muted: #5e6f64; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #f4f6f4; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+    #app { position: fixed; inset: 0; }
+    canvas { display: block; touch-action: none; }
+
+    .hud { position: fixed; inset: 0; pointer-events: none; padding: 26px;
+      display: flex; flex-direction: column; justify-content: space-between; }
+    .eyebrow { font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+    .title { font-size: 24px; font-weight: 650; color: var(--ink); letter-spacing: -0.01em; margin-top: 4px; }
+    .sub { font-size: 13px; color: var(--muted); max-width: 34ch; line-height: 1.45; margin-top: 6px; }
+
+    .bottom { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+    .controls { pointer-events: auto; display: flex; gap: 10px; align-items: center; }
+    input {
+      font: inherit; font-size: 14px; color: var(--ink); background: #fff;
+      border: 1px solid rgba(37,50,43,0.14); border-radius: 12px; padding: 10px 14px; width: 220px; outline: none;
+    }
+    input:focus { border-color: #4a7c4e; }
+    .seg { display: inline-flex; background: rgba(255,255,255,0.7); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+      border: 1px solid rgba(37,50,43,0.12); border-radius: 999px; padding: 3px; }
+    .seg button { border: none; background: transparent; padding: 7px 14px; }
+    .seg button.on { background: var(--ink); color: #fff; }
+    button {
+      font: inherit; font-size: 13px; font-weight: 600; color: var(--ink); background: rgba(255,255,255,0.7);
+      -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border: 1px solid rgba(37,50,43,0.12);
+      border-radius: 999px; padding: 9px 16px; cursor: pointer; transition: background 0.2s, transform 0.1s;
+    }
+    button:hover { background: #fff; }
+    button:active { transform: scale(0.97); }
+    .hint { font-size: 12px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div class="hud">
+    <div class="top">
+      <div class="eyebrow">pine tree qr · tiered + matched v2</div>
+      <div class="title">the needles ARE the QR</div>
+      <div class="sub">a 4-tiered fir whose needles are dark or pale by the module under each one — so the tree carries the QR and the top-down scans. drag to orbit, tap to flatten.</div>
+    </div>
+    <div class="bottom">
+      <span class="hint">drag to spin · tap to flatten / grow</span>
+      <div class="controls">
+        <span class="seg" id="seg">
+          <button data-v="forest" class="on">forest</button>
+          <button data-v="snow">snow</button>
+        </span>
+        <input id="content" type="url" spellcheck="false" autocomplete="off" autocapitalize="off" />
+        <button id="toggle">flatten to QR</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="importmap">
+  { "imports": { "three": "https://esm.sh/three@0.160.0" } }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three'
+    import QRCode from 'https://esm.sh/qrcode@1.5.3'
+
+    const CUBE = 1
+    const TRUNK_RADIUS = 2.5
+    const TRUNK_LAYERS = 11
+    const TIERS = 4
+    const LAYERS_PER_TIER = 7
+    const CANOPY_OUTER_RADIUS_FACTOR = 0.46
+    const DEFAULT_CONTENT = 'https://pynzhern.com'
+
+    // matched palette per variant: topmost needle per cell is dark (dark module) or pale (light module),
+    // so the canopy carries the QR. occluded needles use a natural low→high gradient.
+    const GROUND = {
+      forest: { dark: new THREE.Color('#4a5a3a'), light: new THREE.Color('#dac9a1') },
+      snow:   { dark: new THREE.Color('#7d8a86'), light: new THREE.Color('#eef2f4') }
+    }
+    const TRUNK = { forest: new THREE.Color('#5e4329'), snow: new THREE.Color('#5a4636') }
+    const PINE = {
+      forest: { dark: new THREE.Color('#2c6435'), pale: new THREE.Color('#a6c96a'), low: new THREE.Color('#27592f'), high: new THREE.Color('#4a8a4a') }, // fresh greens — light needles read as new growth, not die-back
+      snow:   { dark: new THREE.Color('#2f5a37'), pale: new THREE.Color('#eef3f4'), low: new THREE.Color('#2b5333'), high: new THREE.Color('#4a8a50') }
+    }
+
+    function generateQRMatrix(content) {
+      const data = QRCode.create(content || DEFAULT_CONTENT, { errorCorrectionLevel: 'M' })
+      const size = data.modules.size
+      const matrix = []
+      for (let y = 0; y < size; y++) {
+        const row = []
+        for (let x = 0; x < size; x++) row.push(data.modules.get(x, y) === 1)
+        matrix.push(row)
+      }
+      return matrix
+    }
+
+    // tiered notched fir, sharp tip on the last tier — returns the layer indices present at radius d
+    function canopyTiered(d, outer) {
+      const total = TIERS * LAYERS_PER_TIER
+      const out = []
+      for (let L = 0; L < total; L++) {
+        const tier = Math.floor(L / LAYERS_PER_TIER)
+        const p = (L - tier * LAYERS_PER_TIER) / LAYERS_PER_TIER
+        const taper = tier === TIERS - 1 ? 0.12 : 0.46
+        const r = outer * (1 - tier * 0.20) * (1 - p * (1 - taper))
+        if (d <= r) out.push(L)
+      }
+      return out
+    }
+
+    function generateBlocks(matrix) {
+      const gridSize = matrix.length
+      const cx = (gridSize - 1) / 2, cy = (gridSize - 1) / 2
+      const outer = gridSize * CANOPY_OUTER_RADIUS_FACTOR
+      const canopyBase = TRUNK_LAYERS * CUBE
+
+      // monotone QR floor (shows the finders + outer ring where the canopy doesn't cover)
+      const ground = []
+      for (let row = 0; row < gridSize; row++)
+        for (let col = 0; col < gridSize; col++)
+          ground.push({ col, row, baseY: 0, dark: matrix[row][col] })
+
+      // trunk column at the centre (brown, occluded under the canopy)
+      const trunk = []
+      for (let row = 0; row < gridSize; row++)
+        for (let col = 0; col < gridSize; col++) {
+          if (Math.hypot(col - cx, row - cy) >= TRUNK_RADIUS) continue
+          for (let L = 0; L < TRUNK_LAYERS; L++) trunk.push({ col, row, baseY: L * CUBE })
+        }
+
+      // tiered canopy over the WHOLE footprint — dark AND light cells, so the QR mottles the needles
+      const canopy = []
+      for (let row = 0; row < gridSize; row++)
+        for (let col = 0; col < gridSize; col++) {
+          const d = Math.hypot(col - cx, row - cy)
+          if (d >= outer) continue
+          const layers = canopyTiered(d, outer)
+          if (!layers.length) continue
+          const maxL = layers[layers.length - 1]
+          for (const L of layers) canopy.push({ col, row, baseY: canopyBase + L * CUBE, shade: L / Math.max(1, maxL) })
+        }
+
+      // topmost needle per cell carries the QR
+      const cellTop = new Map()
+      for (const v of canopy) { const k = v.col * 4096 + v.row; const m = cellTop.get(k); if (m === undefined || v.baseY > m) cellTop.set(k, v.baseY) }
+      for (const v of canopy) { v.dark = matrix[v.row][v.col]; v.top = v.baseY >= cellTop.get(v.col * 4096 + v.row) - 0.001 }
+
+      return { ground, trunk, canopy, gridSize, canopyBase, totalHeight: TRUNK_LAYERS + TIERS * LAYERS_PER_TIER }
+    }
+
+    // ---- scene -------------------------------------------------------------
+    const app = document.getElementById('app')
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.setSize(window.innerWidth, window.innerHeight)
+    renderer.outputColorSpace = THREE.SRGBColorSpace
+    app.appendChild(renderer.domElement)
+
+    const scene = new THREE.Scene()
+    scene.background = new THREE.Color('#f4f6f4')
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 8000)
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x9aae9a, 1.0))
+    const sun = new THREE.DirectionalLight(0xffffff, 1.2)
+    sun.position.set(-12, 30, 10)
+    scene.add(sun)
+
+    const cubeGeo = new THREE.BoxGeometry(CUBE, CUBE, CUBE)
+    const groundMat = new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true })
+    const trunkMat = new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true, transparent: true, opacity: 1 })
+    const canopyMat = new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true })
+
+    let groundMesh = null, trunkMesh = null, canopyMesh = null
+    let gridSize = 0, totalHeight = 0
+    let variant = 'forest'
+    const obj = new THREE.Object3D(), tc = new THREE.Color()
+
+    function instanced(arr, mat, colourFn, offset) {
+      const m = new THREE.InstancedMesh(cubeGeo, mat, arr.length)
+      for (let i = 0; i < arr.length; i++) {
+        const b = arr[i]
+        obj.position.set(b.col - offset, b.baseY + CUBE / 2, b.row - offset)
+        obj.updateMatrix(); m.setMatrixAt(i, obj.matrix)
+        m.setColorAt(i, colourFn(b))
+      }
+      m.instanceMatrix.needsUpdate = true
+      if (m.instanceColor) m.instanceColor.needsUpdate = true
+      return m
+    }
+
+    function build(content) {
+      const data = generateBlocks(generateQRMatrix(content))
+      gridSize = data.gridSize; totalHeight = data.totalHeight
+      const offset = (gridSize - 1) / 2
+      const G = GROUND[variant], P = PINE[variant], TR = TRUNK[variant]
+
+      for (const m of [groundMesh, trunkMesh, canopyMesh]) if (m) { scene.remove(m); m.dispose() }
+
+      groundMesh = instanced(data.ground, groundMat, b => (b.dark ? G.dark : G.light), offset)
+      scene.add(groundMesh)
+      trunkMesh = instanced(data.trunk, trunkMat, () => TR, offset)
+      scene.add(trunkMesh)
+      canopyMesh = instanced(data.canopy, canopyMat, b => {
+        if (b.top) return b.dark ? P.dark : P.pale         // exposed top → carries the QR
+        return tc.copy(P.low).lerp(P.high, b.shade)        // occluded → natural needle gradient
+      }, offset)
+      scene.add(canopyMesh)
+    }
+
+    // ---- camera: flat↔iso morph + drag orbit ------------------------------
+    let t = 0, target = 1
+    let az = 0.7, el = 0.62
+    const pos = new THREE.Vector3(), tgt = new THREE.Vector3(), dir = new THREE.Vector3(), up = new THREE.Vector3()
+    const UP_FLAT = new THREE.Vector3(0, 0, -1), UP_ISO = new THREE.Vector3(0, 1, 0)
+    function easeInOut(x) { return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2 }
+
+    function frame(now) {
+      t += (target - t) * 0.10
+      if (Math.abs(target - t) < 0.0004) t = target
+      const e = easeInOut(t)
+
+      const w = window.innerWidth, h = window.innerHeight, aspect = w / h
+      const span = gridSize
+      const flatHalf = Math.max(span * 0.5, span / (2 * aspect)) * 1.14
+      const isoHalf = Math.max(span * 0.64, totalHeight * 0.52) * 1.1
+      const halfH = flatHalf + (isoHalf - flatHalf) * e
+      camera.top = halfH; camera.bottom = -halfH; camera.left = -halfH * aspect; camera.right = halfH * aspect
+      camera.updateProjectionMatrix()
+
+      const elNow = (Math.PI / 2) * (1 - e) + el * e
+      const azNow = az * e
+      dir.set(Math.cos(elNow) * Math.sin(azNow), Math.sin(elNow), Math.cos(elNow) * Math.cos(azNow))
+      up.copy(UP_FLAT).lerp(UP_ISO, e).normalize()
+      tgt.set(0, totalHeight * 0.42 * e, 0)
+      pos.copy(dir).multiplyScalar(span * 6).add(tgt)
+      camera.position.copy(pos); camera.up.copy(up); camera.lookAt(tgt)
+
+      // trunk fades when flat (so the flat centre is the canopy QR, not the trunk); canopy stays — it IS the QR
+      const o = e <= 0.2 ? 0 : Math.min(1, (e - 0.2) / 0.55)
+      trunkMat.opacity = o * o * (3 - 2 * o)
+      // gentle sway ×e → zero when flat, so the match holds at rest
+      if (canopyMesh) {
+        const tm = now / 1000
+        canopyMesh.rotation.z = Math.sin(tm * 1.1) * 0.012 * e
+        canopyMesh.rotation.x = Math.cos(tm * 0.9) * 0.008 * e
+      }
+
+      renderer.render(scene, camera)
+      requestAnimationFrame(frame)
+    }
+
+    // ---- interaction -------------------------------------------------------
+    const btn = document.getElementById('toggle')
+    const input = document.getElementById('content')
+    input.value = DEFAULT_CONTENT
+
+    function toggle() {
+      target = target === 0 ? 1 : 0
+      btn.textContent = target === 1 ? 'flatten to QR' : 'grow pine'
+    }
+    btn.addEventListener('click', toggle)
+
+    let dragging = false, lastX = 0, lastY = 0, moved = 0
+    const cv = renderer.domElement
+    cv.addEventListener('pointerdown', function (ev) { dragging = true; lastX = ev.clientX; lastY = ev.clientY; moved = 0; cv.setPointerCapture(ev.pointerId) })
+    cv.addEventListener('pointermove', function (ev) {
+      if (!dragging) return
+      const dx = ev.clientX - lastX, dy = ev.clientY - lastY
+      lastX = ev.clientX; lastY = ev.clientY; moved += Math.abs(dx) + Math.abs(dy)
+      az -= dx * 0.006
+      el = Math.max(0.2, Math.min(1.45, el + dy * 0.005))
+    })
+    cv.addEventListener('pointerup', function () { dragging = false; if (moved < 6) toggle() })
+
+    const seg = document.getElementById('seg')
+    seg.addEventListener('click', function (ev) {
+      const b = ev.target.closest('button'); if (!b) return
+      variant = b.dataset.v
+      seg.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b))
+      build(input.value)
+    })
+
+    let debounce = null
+    input.addEventListener('input', function () { clearTimeout(debounce); debounce = setTimeout(function () { build(input.value) }, 250) })
+    window.addEventListener('resize', function () { renderer.setSize(window.innerWidth, window.innerHeight) })
+
+    build(DEFAULT_CONTENT)
+    requestAnimationFrame(frame)
+  </script>
+</body>
+</html>

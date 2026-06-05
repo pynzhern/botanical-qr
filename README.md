@@ -20,6 +20,7 @@ Open any file directly, or serve the folder (`python3 -m http.server`) and visit
 ### Pine
 - **`pine-tree-qr.html`** — single pine, now **geometry-matched** like the caladium: a conical canopy of grid-aligned voxels whose topmost needle per cell is dark or pale green by the module under it, so the QR shows *in the 3D tree* and the top-down scans (jsQR decode-verified). A monotone forest floor carries the QR outside the canopy. No snow.
 - **`pine-tree-qr-toy-matched.html`** — the 4-tiered fir, **matched**: needles are dark/pale green by the module under each, so the canopy carries the QR (decode-verified). forest/snow colour toggle, drag-to-orbit, canopy sway — no falling particles.
+- **`pine-tree-qr-toy-matched-v2.html`** — same, but the light-module needles are a **fresh yellow-green** (new-growth) instead of grey-sage, so the dapple reads as healthy foliage, not die-back. (v1's grey-green looked like a dying tree.)
 - **`pine-tree-qr-toy.html`** — original tiered fir toy with a forest/snow switch and falling needles/snow (not matched).
 - **`pine-tree-qr-compare.html`** — single cone vs tiered fir vs snow, side by side.
 
