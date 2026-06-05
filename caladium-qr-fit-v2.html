@@ -193,10 +193,11 @@
           if (d <= rOut && d >= rIn) out.push({ x, y: ly, z, c: rim ? POT_RIM : POT_BODY })
         }
       }
-      // soil caps the pot — fill each of the top few layers up to just inside the wall so there's
-      // no see-through gap ring (and a little depth so you can't peek into a hollow interior)
+      // soil sits a layer below the rim → a visible terracotta lip; fill the top soil layers up to
+      // just inside the wall so there's no see-through gap
       const mf = Math.ceil(potR)
-      for (let ly = potH - 1; ly >= Math.max(0, potH - 3); ly--) {
+      const soilTop = potH - 2
+      for (let ly = soilTop; ly >= Math.max(0, soilTop - 2); ly--) {
         const rFill = potR * (0.7 + 0.3 * ly / (potH - 1)) - 1.1
         for (let x = -mf; x <= mf; x++) for (let z = -mf; z <= mf; z++) {
           if (Math.hypot(x, z) <= rFill) out.push({ x, y: ly, z, c: POT_SOIL })
