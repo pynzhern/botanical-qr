@@ -1,8 +1,14 @@
-# qr-botanical
+# botanical-qr
 
-Standalone Three.js prototypes where the **top-down view is a scannable QR code** and tilting reveals a **3D voxel plant**. Inspired by Reactiive's `cherry-blossom-qrcode` demo (which is React Native + WebGPU); these are reimplemented in browser Three.js so they run in Chrome and Safari.
+**Botanical QR** — standalone Three.js prototypes where the **top-down view is a scannable QR code** and tilting reveals a **3D voxel plant**. Inspired by Reactiive's `cherry-blossom-qrcode` demo (which is React Native + WebGPU); these are reimplemented in browser Three.js so they run in Chrome and Safari.
 
 Open any file directly, or serve the folder (`python3 -m http.server`) and visit it. Each has a live URL input and a tap-to-flatten toggle.
+
+## Combined showcase
+
+- **`botanical-qr.html`** — the production-ready single page. One Three.js renderer/camera/loop with a switcher for **caladium · H**, **caladium · M** and **pine · M** (the pine keeps its forest/snow toggle). Shared URL input + flatten toggle, accent/background shift per plant, responsive (mobile controls wrap), Safari + Chrome. Each builder emits a common `{ groups, view }` shape — `groups` carry `fade` (pot/trunk/overhang fade when flat) and `sway` (the plant body sways in iso) flags — so the harness stays generic. Geometry and per-module colours are ported verbatim from the keepers below; only lighting/roughness are unified. **All four reachable flat states are jsQR decode-verified.** Rename to `index.html` to host it at a repo root.
+  - **Export** — *save qr* writes a 1080² scannable PNG of the flat top-down; *record loop* captures a seamless **top-down → grow → 360° orbit → flatten** video (mp4 in Safari, webm in Chrome, via `MediaRecorder` + `captureStream`); *save gif* encodes the same loop client-side with `gif.js` (480², loops inline anywhere a video won't). All three render through a square offscreen renderer + a 2D compositor. The loop's two endpoints are the identical flat frame (and azimuth returns to 0, not 2π) so it loops with no seam or extra un-spin. Every flat PNG, recorded-mp4 flat frame and GIF flat frame is jsQR decode-verified for all four plant states. Exports are **signed**: the stacked `pyn / zhern` mark sits in a footer band below the code (outside the quiet zone, so it never affects scanning), and PNGs also carry invisible authorship in a `tEXt` Copyright chunk. The footer's dark logo is a competing feature for the most fragile code, so snowy-pine's contrast boost is raised to 2.0 to keep it scanning with the footer present.
+  - **Why some exports get a contrast lift (and why it's *not* error correction):** as a standalone image the low-contrast designs — caladium·M and the snowy pine — wouldn't decode raw, even though they scan fine live. Investigation (per-module luminance vs the true matrix, plus hard-binarise-then-decode tests) showed this is **not** a Reed-Solomon / error-budget problem: pine-snow has **zero** mis-classified modules yet failed raw, and a pure black/white threshold decodes it — so the data was always intact. The real failure is in jsQR's **binarisation / finder-location** stage: when the "dark" tones sit at mid-luminance (the snowy-ground shadow grey ≈ 0.5; the caladium leaf-mottle veins/blades at 0.4–0.5) and the whole image is low dynamic range, the locator can't separate modules even though they're technically distinct. A gentle contrast lift (which lets jsQR run its own *local adaptive* threshold with more range) fixes it; a single global threshold does not (it can't resolve the caladium's sub-module mottle texture). So the boost is **per-model and minimal** — `1.0` (none) for caladium·H and forest pine, which scan raw and export exactly as shown on screen; `1.5` only for caladium·M and snowy pine. It applies at the flat (scannable) frame and ramps to none by full iso, so the 3D orbit always looks natural. jsQR's decode floor is ≈`1.2`; `1.5` leaves headroom for real-phone scanning.
 
 ## Builds
 
@@ -23,6 +29,12 @@ Open any file directly, or serve the folder (`python3 -m http.server`) and visit
 - **`pine-tree-qr-toy-matched-v2.html`** — same, but the light-module needles are a **fresh yellow-green** (new-growth) instead of grey-sage, so the dapple reads as healthy foliage, not die-back. (v1's grey-green looked like a dying tree.)
 - **`pine-tree-qr-toy.html`** — original tiered fir toy with a forest/snow switch and falling needles/snow (not matched).
 - **`pine-tree-qr-compare.html`** — single cone vs tiered fir vs snow, side by side.
+
+## Ideas / backlog (June 2026 dump)
+
+- **CJ Hendry flower-market / flower-shop theme** — lean a set of botanical QR codes into the CJ Hendry "Flower Market" pop-up aesthetic (lush, hyperreal, flower-shop styling) as a visual direction / framing, not just single plants. Could tie the codes to a flower-market concept page.
+- **Vanda Miss Joaquim orchid** — botanical QR build of Singapore's national flower. Grid-aligned voxel orchid; matching challenge is the slender, asymmetric petals — express tilt via per-cell *height* only (never sideways displacement), per the matching rule below. Mauve/violet petals whose brightness carries the modules.
+- **Frangipani tree** — botanical QR build of a frangipani (plumeria): trunk + broad canopy of 5-petal blooms; warm cream/white petals with a yellow centre, bloom brightness carrying the modules (light blooms = light modules), foliage for the darker ones.
 
 ## How the matching works
 

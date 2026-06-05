@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>qr botanical — scannable voxel plants</title>
+  <meta name="description" content="The top-down view is a real, scannable QR code; tilt it and a 3D voxel plant grows. Caladium and pine, built in Three.js." />
+  <meta name="theme-color" content="#f5f3f3" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23344b2f'/%3E%3C/svg%3E" />
+  <style>
+    :root {
+      --ink: #2a2a2e; --muted: #6b6b72; --accent: #c24d77; --bg: #f7f1f3;
+      --panel: rgba(255,255,255,0.72); --panel-line: rgba(20,20,24,0.12);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); transition: background 0.5s ease; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; color: var(--ink); }
+    #app { position: fixed; inset: 0; }
+    canvas { display: block; touch-action: none; }
+
+    .hud { position: fixed; inset: 0; pointer-events: none;
+      padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+      display: flex; flex-direction: column; justify-content: space-between; }
+
+    .eyebrow { font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+    .title { font-size: 24px; font-weight: 650; color: var(--ink); letter-spacing: -0.01em; margin-top: 4px; }
+    .sub { font-size: 13px; color: var(--muted); max-width: 38ch; line-height: 1.45; margin-top: 6px; }
+
+    .bottom { display: flex; flex-direction: column; gap: 12px; }
+    .hint { font-size: 12px; color: var(--muted); }
+    .controls { pointer-events: auto; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+    .seg { display: inline-flex; background: var(--panel); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+      border: 1px solid var(--panel-line); border-radius: 999px; padding: 3px; }
+    .seg button { border: none; background: transparent; color: var(--ink); font: inherit; font-size: 13px; font-weight: 600;
+      padding: 8px 15px; border-radius: 999px; cursor: pointer; transition: background 0.18s, color 0.18s; white-space: nowrap; }
+    .seg button.on { background: var(--accent); color: #fff; }
+    .seg.hidden { display: none; }
+
+    input {
+      font: inherit; font-size: 14px; color: var(--ink); background: #fff;
+      border: 1px solid var(--panel-line); border-radius: 12px; padding: 10px 14px; width: 230px; outline: none; transition: border-color 0.18s;
+    }
+    input:focus { border-color: var(--accent); }
+
+    .btn {
+      font: inherit; font-size: 13px; font-weight: 600; color: var(--ink); background: var(--panel);
+      -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border: 1px solid var(--panel-line);
+      border-radius: 999px; padding: 10px 18px; cursor: pointer; transition: background 0.2s, transform 0.1s; white-space: nowrap;
+    }
+    .btn:hover { background: #fff; }
+    .btn:active { transform: scale(0.97); }
+
+    #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      color: var(--muted); font-size: 14px; letter-spacing: 0.04em; pointer-events: none; transition: opacity 0.4s; }
+    #loading.gone { opacity: 0; }
+
+    @media (max-width: 640px) {
+      .hud { padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)) 16px; }
+      .title { font-size: 19px; }
+      .sub { display: none; }
+      input { flex: 1 1 140px; width: auto; min-width: 0; }
+      .controls { gap: 8px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="loading">growing…</div>
+  <div class="hud">
+    <div class="top">
+      <div class="eyebrow">voxel qr · three.js</div>
+      <div class="title">scannable botanicals</div>
+      <div class="sub">the top-down view is a real, scannable QR code; tilt it and a 3D voxel plant grows from the same pixels. drag to spin, tap to flatten.</div>
+    </div>
+    <div class="bottom">
+      <span class="hint">drag to spin · tap the plant to flatten / grow</span>
+      <div class="controls">
+        <span class="seg" id="modelSeg" role="group" aria-label="choose plant">
+          <button data-model="caladium-h" class="on" aria-pressed="true">caladium · H</button>
+          <button data-model="caladium-m" aria-pressed="false">caladium · M</button>
+          <button data-model="pine" aria-pressed="false">pine · M</button>
+        </span>
+        <span class="seg hidden" id="seasonSeg" role="group" aria-label="choose season">
+          <button data-season="forest" class="on" aria-pressed="true">forest</button>
+          <button data-season="snow" aria-pressed="false">snow</button>
+        </span>
+        <input id="content" type="url" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="QR content URL" />
+        <button class="btn" id="toggle">flatten to QR</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="importmap">
+  { "imports": { "three": "https://esm.sh/three@0.160.0" } }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three'
+    import QRCode from 'https://esm.sh/qrcode@1.5.3'
+
+    const CUBE = 1
+    const DEFAULT_CONTENT = 'https://pynzhern.com'
+
+    // ======================================================================
+    // shared QR helper — only LUMINANCE is read by scanners, so any hue works
+    // as a module as long as dark stays dark and light stays light.
+    // ======================================================================
+    function qrMatrix(content, opts) {
+      let data
+      try { data = QRCode.create(content || DEFAULT_CONTENT, opts) }
+      catch (e) { data = QRCode.create(content || DEFAULT_CONTENT, { errorCorrectionLevel: opts.errorCorrectionLevel }) }
+      const size = data.modules.size
+      const matrix = []
+      for (let y = 0; y < size; y++) {
+        const row = []
+        for (let x = 0; x < size; x++) row.push(data.modules.get(x, y) === 1)
+        matrix.push(row)
+      }
+      return matrix
+    }
+
+    // ======================================================================
+    // CALADIUM — climbing golden-angle spiral of heart leaves. Every leaf cell
+    // is coloured by the module beneath it: exposed tops carry the real QR, the
+    // rest is a matching "mock" mottle so the whole plant reads as one variegated
+    // thing. Leaves are scaled (never clipped) to fan out to the square edge.
+    // ======================================================================
+    const CAL = (() => {
+      const CREAM = '#f3e7ea'
+      const FLOOR_DARK = '#566159'
+      const CREAM_C = new THREE.Color(CREAM)
+      const FLOOR_DARK_C = new THREE.Color(FLOOR_DARK)
+      const STALK_DARK = new THREE.Color('#587a3f')
+      const GREEN_PALE = new THREE.Color('#d2e2cd')
+      // unified variegation: midrib → blade → vein → green band → margin, on every leaf
+      const ZD = { midrib: new THREE.Color('#8a2f54'), blade: new THREE.Color('#b34d72'), vein: new THREE.Color('#b3607f'), gband: new THREE.Color('#4f7a3a'), margin: new THREE.Color('#3f6e34') } // dark module
+      const ZL = { midrib: new THREE.Color('#d886ad'), blade: new THREE.Color('#e6a8c6'), vein: new THREE.Color('#eccfe0'), gband: new THREE.Color('#b6d2a4'), margin: new THREE.Color('#a4c197') } // light module
+      const ZN = { midrib: new THREE.Color('#9c3d63'), blade: new THREE.Color('#c9608a'), vein: new THREE.Color('#f3e6ec'), gband: new THREE.Color('#5f8f48'), margin: new THREE.Color('#3f6e34') } // occluded
+      const POT_R = 8.5, POT_H = 11
+      const POT_BODY = new THREE.Color('#c0744d')
+      const POT_RIM = new THREE.Color('#d98f63')
+      const POT_SOIL = new THREE.Color('#4f3b2a')
+
+      function pseudoRandom(a, b, seed) { const s = Math.sin(a * 127.1 + b * 311.7 + seed * 43.7) * 43758.5; return s - Math.floor(s) }
+      function frac(x) { return x - Math.floor(x) }
+      function heart(u, v) { const x = u * 1.2, y = 1.2 - v * 2.4; const a = x * x + y * y - 1; return a * a * a - x * x * y * y * y <= 0 }
+      function leafZone(u, v, e1, e2) {
+        if (e1 || e2) return 'margin'
+        const t = Math.abs(u)
+        if (t < 0.07) return 'midrib'
+        if (t > 0.68) return 'gband'
+        if (frac(t * 4 - v * 1.6) < 0.09) return 'vein'
+        return 'blade'
+      }
+      function pushCell(onOut, offOut, col, row, H, offset, zone, gridSize) {
+        const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
+        if (onTile) onOut.push({ col, row, H, zone })
+        else offOut.push({ x: col - offset, y: H, z: row - offset, color: ZN[zone] })
+      }
+      function pushStalk(onOut, offOut, wx, wy, wz, matrix, offset, gridSize) {
+        const col = Math.round(wx + offset), row = Math.round(wz + offset)
+        const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
+        if (onTile) onOut.push({ col, row, H: wy, color: matrix[row][col] ? STALK_DARK : GREEN_PALE, fixed: true })
+        else offOut.push({ x: col - offset, y: wy, z: row - offset, color: GREEN_PALE })
+      }
+      function buildLeaf(onOut, offOut, leaf, matrix, offset, gridSize, potH) {
+        const { cx, cz, az, size, baseH, rise, droop, cup } = leaf
+        const ca = Math.cos(az), sa = Math.sin(az)
+        const du = 1 / size, dv = 1 / (size * 1.7)
+        const ext = Math.ceil(size * 2.4)
+        const ccol = Math.round(cx + offset), crow = Math.round(cz + offset)
+        let lmaxY = baseH
+        const sSteps = Math.ceil(Math.hypot(cx, cz) + Math.abs(baseH - potH)) + 1
+        for (let s = 0; s <= sSteps; s++) {
+          const f = s / sSteps
+          pushStalk(onOut, offOut, cx * f, potH + (baseH - potH) * f, cz * f, matrix, offset, gridSize)
+        }
+        for (let col = ccol - ext; col <= ccol + ext; col++) {
+          for (let row = crow - ext; row <= crow + ext; row++) {
+            const dx = (col - offset) - cx, dz = (row - offset) - cz
+            const lz = dx * ca + dz * sa, lx = -dx * sa + dz * ca
+            const u = lx / size, v = lz / (size * 1.7)
+            if (v < 0 || v > 1 || u < -1 || u > 1) continue
+            if (!heart(u, v)) continue
+            const e1 = !heart(u + du, v) || !heart(u - du, v) || !heart(u, v + dv) || !heart(u, v - dv)
+            const e2 = !heart(u + 2 * du, v) || !heart(u - 2 * du, v) || !heart(u, v + 2 * dv) || !heart(u, v - 2 * dv)
+            const zone = leafZone(u, v, e1, e2)
+            const H = baseH + v * rise - droop * v * v - cup * u * u
+            pushCell(onOut, offOut, col, row, Math.max(potH, H), offset, zone, gridSize)
+            if (H > lmaxY) lmaxY = H
+          }
+        }
+        return lmaxY
+      }
+      function buildPot(out, potR, potH) {
+        for (let ly = 0; ly < potH; ly++) {
+          const rOut = potR * (0.7 + 0.3 * ly / (potH - 1))
+          const rIn = rOut - 1.6
+          const rim = ly === potH - 1
+          const m = Math.ceil(potR)
+          for (let x = -m; x <= m; x++) for (let z = -m; z <= m; z++) {
+            const d = Math.hypot(x, z)
+            if (d <= rOut && d >= rIn) out.push({ x, y: ly, z, color: rim ? POT_RIM : POT_BODY })
+          }
+        }
+        // soil a layer below the rim → visible terracotta lip, filled up to the wall so there's no see-through
+        const mf = Math.ceil(potR)
+        const soilTop = potH - 2
+        for (let ly = soilTop; ly >= Math.max(0, soilTop - 2); ly--) {
+          const rFill = potR * (0.7 + 0.3 * ly / (potH - 1)) - 1.1
+          for (let x = -mf; x <= mf; x++) for (let z = -mf; z <= mf; z++) {
+            if (Math.hypot(x, z) <= rFill) out.push({ x, y: ly, z, color: POT_SOIL })
+          }
+        }
+      }
+
+      function build(content, ec) {
+        const opts = ec === 'H' ? { errorCorrectionLevel: 'H', version: 9 } : { errorCorrectionLevel: 'M' }
+        const matrix = qrMatrix(content, opts)
+        const gridSize = matrix.length
+        const offset = (gridSize - 1) / 2
+
+        const groundCells = []
+        let dark = 0, total = 0
+        for (let row = 0; row < gridSize; row++) for (let col = 0; col < gridSize; col++) {
+          const isDark = matrix[row][col]; total++; if (isDark) dark++
+          groundCells.push({ x: col - offset, y: 0, z: row - offset, color: isDark ? FLOOR_DARK_C : CREAM_C })
+        }
+
+        const sc = gridSize / 33
+        const potR = POT_R * sc, potH = Math.max(4, Math.round(POT_H * sc))
+        const potCells = []
+        buildPot(potCells, potR, potH)
+
+        const leaves = [], overhang = []
+        const N = Math.max(9, Math.min(12, 9 + Math.round((dark / total) * 3)))
+        const GOLDEN = 2.39996323
+        const MAX_TILT = 1.4
+
+        const defs = []
+        for (let k = 0; k < N; k++) {
+          const qrBit = matrix[(k * 7) % gridSize][(k * 13) % gridSize] ? 1 : 0
+          const r2 = pseudoRandom(k, 2, qrBit + 3), r3 = pseudoRandom(k, 5, qrBit + 7)
+          const r4 = pseudoRandom(k, 8, qrBit + 2), r5 = pseudoRandom(k, 11, qrBit + 9), r6 = pseudoRandom(k, 13, qrBit)
+          const t = N > 1 ? k / (N - 1) : 0
+          defs.push({
+            az: k * GOLDEN, rc: (0.9 + r3 * 1.7) * sc, climbH: (3 + t * 30 + r5 * 3) * sc,
+            size: (9 + t * 2.5 + r2 * 3) * sc, rise: (8 + r6 * 5) * sc, droop: (3 + r4 * 3) * sc, cup: (3 + r3 * 2.5) * sc
+          })
+        }
+        // per-leaf fit: grow each leaf to the SQUARE edge in its own direction (no overhang, fans to corners)
+        const S = gridSize * 0.5 - 0.3
+        let maxY = 0, maxR = 0
+        for (const d of defs) {
+          const cA = Math.abs(Math.cos(d.az)), sA = Math.abs(Math.sin(d.az))
+          const reach = d.rc + d.size * 1.7, lat = d.size * 0.85
+          const bx = reach * cA + lat * sA, bz = reach * sA + lat * cA
+          const f = Math.min(2, S / Math.max(bx, bz))
+          const rc = d.rc * f, size = d.size * f
+          const baseH = potH + Math.max(d.climbH, rc / MAX_TILT)
+          const leaf = { cx: Math.cos(d.az) * rc, cz: Math.sin(d.az) * rc, az: d.az, size, baseH, rise: d.rise, droop: d.droop, cup: d.cup * f }
+          const ly = buildLeaf(leaves, overhang, leaf, matrix, offset, gridSize, potH)
+          if (ly > maxY) maxY = ly
+          const rr = rc + size * 1.7; if (rr > maxR) maxR = rr
+        }
+        if (potR > maxR) maxR = potR
+
+        // colour every on-tile leaf cell by its module → exposed tops = real QR, the rest = matching mottle
+        const leafCells = []
+        for (const v of leaves) {
+          const color = v.fixed ? v.color : (matrix[v.row][v.col] ? ZD[v.zone] : ZL[v.zone])
+          leafCells.push({ x: v.col - offset, y: v.H, z: v.row - offset, color })
+        }
+
+        return {
+          groups: [
+            { cells: groundCells, fade: false, sway: false },
+            { cells: potCells, fade: true, sway: false },
+            { cells: leafCells, fade: false, sway: true },
+            { cells: overhang, fade: true, sway: true }
+          ],
+          view: { span: gridSize, maxR, maxY, spanK: 0.6, radK: 0.82, heightK: 0.55, focusK: 0.4 }
+        }
+      }
+      return { build }
+    })()
+
+    // ======================================================================
+    // PINE — tiered notched fir. The body is dark green; only the exposed top
+    // needle of each cell is coloured by its module, so the canopy carries the
+    // QR and (in snow) the white lands only on the upward tops = snow resting ON
+    // the tree. forest / snow swap palette + ground.
+    // ======================================================================
+    const PINE = (() => {
+      const TRUNK_RADIUS = 2.5, TRUNK_LAYERS = 11, TIERS = 4, LAYERS_PER_TIER = 7, OUTER_FACTOR = 0.46
+      const GROUND = {
+        forest: { dark: new THREE.Color('#3f3020'), light: new THREE.Color('#c2a878') },
+        snow:   { dark: new THREE.Color('#7a858c'), light: new THREE.Color('#eef3f6') }
+      }
+      const TRUNK = { forest: new THREE.Color('#5e4329'), snow: new THREE.Color('#5a4636') }
+      const PAL = {
+        forest: { dark: new THREE.Color('#244f29'), pale: new THREE.Color('#a6c96a') },
+        snow:   { dark: new THREE.Color('#2f5a37'), pale: new THREE.Color('#eef3f4') }
+      }
+      function canopyTiered(d, outer) {
+        const total = TIERS * LAYERS_PER_TIER, out = []
+        for (let L = 0; L < total; L++) {
+          const tier = Math.floor(L / LAYERS_PER_TIER)
+          const p = (L - tier * LAYERS_PER_TIER) / LAYERS_PER_TIER
+          const taper = tier === TIERS - 1 ? 0.12 : 0.46
+          const r = outer * (1 - tier * 0.20) * (1 - p * (1 - taper))
+          if (d <= r) out.push(L)
+        }
+        return out
+      }
+      function build(content, variant) {
+        const matrix = qrMatrix(content, { errorCorrectionLevel: 'M' })
+        const gridSize = matrix.length
+        const cx = (gridSize - 1) / 2, cy = (gridSize - 1) / 2
+        const offset = (gridSize - 1) / 2
+        const outer = gridSize * OUTER_FACTOR
+        const canopyBase = TRUNK_LAYERS * CUBE
+        const G = GROUND[variant], TR = TRUNK[variant], P = PAL[variant]
+
+        const groundCells = []
+        for (let row = 0; row < gridSize; row++) for (let col = 0; col < gridSize; col++)
+          groundCells.push({ x: col - offset, y: 0, z: row - offset, color: matrix[row][col] ? G.dark : G.light })
+
+        const trunkCells = []
+        for (let row = 0; row < gridSize; row++) for (let col = 0; col < gridSize; col++) {
+          if (Math.hypot(col - cx, row - cy) >= TRUNK_RADIUS) continue
+          for (let L = 0; L < TRUNK_LAYERS; L++) trunkCells.push({ x: col - offset, y: L * CUBE, z: row - offset, color: TR })
+        }
+
+        const canopy = []
+        for (let row = 0; row < gridSize; row++) for (let col = 0; col < gridSize; col++) {
+          const d = Math.hypot(col - cx, row - cy)
+          if (d >= outer) continue
+          const layers = canopyTiered(d, outer)
+          if (!layers.length) continue
+          for (const L of layers) canopy.push({ col, row, baseY: canopyBase + L * CUBE })
+        }
+        const cellTop = new Map()
+        for (const v of canopy) { const k = v.col * 4096 + v.row; const m = cellTop.get(k); if (m === undefined || v.baseY > m) cellTop.set(k, v.baseY) }
+        const canopyCells = []
+        for (const v of canopy) {
+          const top = v.baseY >= cellTop.get(v.col * 4096 + v.row) - 0.001
+          const dark = matrix[v.row][v.col]
+          canopyCells.push({ x: v.col - offset, y: v.baseY, z: v.row - offset, color: top ? (dark ? P.dark : P.pale) : P.dark })
+        }
+
+        const totalHeight = TRUNK_LAYERS + TIERS * LAYERS_PER_TIER
+        return {
+          groups: [
+            { cells: groundCells, fade: false, sway: false },
+            { cells: trunkCells, fade: true, sway: false },
+            { cells: canopyCells, fade: false, sway: true }
+          ],
+          view: { span: gridSize, maxR: 0, maxY: totalHeight, spanK: 0.64, radK: 0, heightK: 0.52, focusK: 0.42 }
+        }
+      }
+      return { build }
+    })()
+
+    // ======================================================================
+    // model registry
+    // ======================================================================
+    const MODELS = {
+      'caladium-h': { accent: '#c24d77', bg: '#f7f1f3', grow: 'grow caladium', seasons: false, build: c => CAL.build(c, 'H') },
+      'caladium-m': { accent: '#c24d77', bg: '#f7f1f3', grow: 'grow caladium', seasons: false, build: c => CAL.build(c, 'M') },
+      'pine':       { accent: '#4a7c4e', bg: '#f2f5f2', grow: 'grow pine',     seasons: true,  build: (c, v) => PINE.build(c, v) }
+    }
+
+    // ======================================================================
+    // scene — one renderer / camera / loop for every model
+    // ======================================================================
+    const app = document.getElementById('app')
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.setSize(window.innerWidth, window.innerHeight)
+    renderer.outputColorSpace = THREE.SRGBColorSpace
+    app.appendChild(renderer.domElement)
+
+    const scene = new THREE.Scene()
+    scene.background = new THREE.Color(MODELS['caladium-h'].bg)
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 8000) // ortho keeps lifted voxels on their footprint top-down
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xa6a8a6, 1.02))
+    const sun = new THREE.DirectionalLight(0xffffff, 1.18)
+    sun.position.set(-11, 29, 11)
+    scene.add(sun)
+
+    const cubeGeo = new THREE.BoxGeometry(CUBE, CUBE, CUBE)
+    const solidMat = new THREE.MeshStandardMaterial({ roughness: 0.88, flatShading: true })          // ground + the plant body (the QR)
+    const fadeMat = new THREE.MeshStandardMaterial({ roughness: 0.9, flatShading: true, transparent: true, opacity: 1 }) // pot/trunk/overhang — fade when flat
+    const obj = new THREE.Object3D()
+
+    let meshes = []          // { mesh, sway }
+    let view = null
+    let currentModel = 'caladium-h'
+    let variant = 'forest'
+
+    function makeMesh(cells, mat) {
+      const mesh = new THREE.InstancedMesh(cubeGeo, mat, cells.length)
+      for (let i = 0; i < cells.length; i++) {
+        const b = cells[i]
+        obj.position.set(b.x, b.y + CUBE / 2, b.z)
+        obj.updateMatrix(); mesh.setMatrixAt(i, obj.matrix)
+        mesh.setColorAt(i, b.color)
+      }
+      mesh.instanceMatrix.needsUpdate = true
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+      return mesh
+    }
+
+    function rebuild() {
+      const data = MODELS[currentModel].build(input.value || DEFAULT_CONTENT, variant)
+      view = data.view
+      for (const m of meshes) { scene.remove(m.mesh); m.mesh.dispose() }
+      meshes = []
+      for (const g of data.groups) {
+        if (!g.cells.length) continue
+        const mesh = makeMesh(g.cells, g.fade ? fadeMat : solidMat)
+        scene.add(mesh); meshes.push({ mesh, sway: g.sway })
+      }
+    }
+
+    // ---- camera: flat ↔ iso morph + drag orbit ----------------------------
+    let t = 0, target = 1
+    let az = 0.7, el = 0.61
+    const pos = new THREE.Vector3(), tgt = new THREE.Vector3(), dir = new THREE.Vector3(), up = new THREE.Vector3()
+    const UP_FLAT = new THREE.Vector3(0, 0, -1), UP_ISO = new THREE.Vector3(0, 1, 0)
+    function easeInOut(x) { return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2 }
+
+    function frame(now) {
+      t += (target - t) * 0.10
+      if (Math.abs(target - t) < 0.0004) t = target
+      const e = easeInOut(t)
+
+      const w = window.innerWidth, h = window.innerHeight, aspect = w / h
+      const span = view.span
+      const flatHalf = Math.max(span * 0.5, span / (2 * aspect)) * 1.14
+      const isoHalf = Math.max(span * view.spanK, view.maxR * view.radK, view.maxY * view.heightK) * 1.1
+      const halfH = flatHalf + (isoHalf - flatHalf) * e
+      camera.top = halfH; camera.bottom = -halfH; camera.left = -halfH * aspect; camera.right = halfH * aspect
+      camera.updateProjectionMatrix()
+
+      const elNow = (Math.PI / 2) * (1 - e) + el * e
+      const azNow = az * e
+      dir.set(Math.cos(elNow) * Math.sin(azNow), Math.sin(elNow), Math.cos(elNow) * Math.cos(azNow))
+      up.copy(UP_FLAT).lerp(UP_ISO, e).normalize()
+      tgt.set(0, view.maxY * view.focusK * e, 0)
+      pos.copy(dir).multiplyScalar(span * 6).add(tgt)
+      camera.position.copy(pos); camera.up.copy(up); camera.lookAt(tgt)
+
+      // fade material fades to nothing when flat → clean square QR; sway × e → 0 at rest so the match holds
+      const o = e <= 0.2 ? 0 : Math.min(1, (e - 0.2) / 0.55)
+      fadeMat.opacity = o * o * (3 - 2 * o)
+      const tm = now / 1000
+      const sz = Math.sin(tm * 1.0) * 0.012 * e, sx = Math.cos(tm * 0.8) * 0.008 * e
+      for (const m of meshes) if (m.sway) { m.mesh.rotation.z = sz; m.mesh.rotation.x = sx }
+
+      renderer.render(scene, camera)
+      requestAnimationFrame(frame)
+    }
+
+    // ---- interaction ------------------------------------------------------
+    const btn = document.getElementById('toggle')
+    const input = document.getElementById('content')
+    const modelSeg = document.getElementById('modelSeg')
+    const seasonSeg = document.getElementById('seasonSeg')
+    const loading = document.getElementById('loading')
+    input.value = DEFAULT_CONTENT
+
+    function toggle() {
+      target = target === 0 ? 1 : 0
+      if (target === 0) az = Math.atan2(Math.sin(az), Math.cos(az)) // un-spin the shortest way back to top-down
+      btn.textContent = target === 1 ? 'flatten to QR' : MODELS[currentModel].grow
+    }
+    btn.addEventListener('click', toggle)
+
+    let dragging = false, lastX = 0, lastY = 0, moved = 0
+    const cv = renderer.domElement
+    cv.addEventListener('pointerdown', ev => { dragging = true; lastX = ev.clientX; lastY = ev.clientY; moved = 0; cv.setPointerCapture(ev.pointerId) })
+    cv.addEventListener('pointermove', ev => {
+      if (!dragging) return
+      const dx = ev.clientX - lastX, dy = ev.clientY - lastY
+      lastX = ev.clientX; lastY = ev.clientY; moved += Math.abs(dx) + Math.abs(dy)
+      az -= dx * 0.006
+      el = Math.max(0.2, Math.min(1.45, el + dy * 0.005))
+    })
+    cv.addEventListener('pointerup', () => { dragging = false; if (moved < 6) toggle() })
+
+    function applyTheme(m) {
+      const root = document.documentElement.style
+      root.setProperty('--accent', m.accent)
+      root.setProperty('--bg', m.bg)
+      scene.background.set(m.bg)
+      document.querySelector('meta[name=theme-color]').setAttribute('content', m.bg)
+    }
+
+    modelSeg.addEventListener('click', ev => {
+      const b = ev.target.closest('button'); if (!b) return
+      currentModel = b.dataset.model
+      const m = MODELS[currentModel]
+      modelSeg.querySelectorAll('button').forEach(x => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on) })
+      seasonSeg.classList.toggle('hidden', !m.seasons)
+      applyTheme(m)
+      btn.textContent = target === 1 ? 'flatten to QR' : m.grow
+      rebuild()
+    })
+
+    seasonSeg.addEventListener('click', ev => {
+      const b = ev.target.closest('button'); if (!b) return
+      variant = b.dataset.season
+      seasonSeg.querySelectorAll('button').forEach(x => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on) })
+      rebuild()
+    })
+
+    let debounce = null
+    input.addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(rebuild, 250) })
+    window.addEventListener('resize', () => renderer.setSize(window.innerWidth, window.innerHeight))
+
+    rebuild()
+    loading.classList.add('gone')
+    setTimeout(() => loading.remove(), 500)
+    requestAnimationFrame(frame)
+  </script>
+</body>
+</html>
