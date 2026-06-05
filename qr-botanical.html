@@ -558,6 +558,14 @@
     }
     function clearSway() { for (const m of meshes) { m.mesh.rotation.z = 0; m.mesh.rotation.x = 0 } }
     function download(href, name) { const a = document.createElement('a'); a.href = href; a.download = name; document.body.appendChild(a); a.click(); a.remove() }
+    // filenames carry the site (from the QR content) + the plant, e.g. pynzhern-com-caladium-h-loop.gif
+    function exportSlug() {
+      let s = (input.value || DEFAULT_CONTENT).trim().replace(/^https?:\/\//i, '').replace(/^www\./i, '')
+      s = s.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase()
+      return s.slice(0, 40) || 'qr'
+    }
+    function exportTag() { return currentModel === 'pine' ? `pine-${variant}` : currentModel }
+    function exportName(suffix, ext) { return `${exportSlug()}-${exportTag()}${suffix}.${ext}` }
     // render one export frame (square, no HUD) into the compositor; contrast is full at flat (e=0), none in iso (e=1)
     // only the low-contrast designs need a contrast lift to stay scannable as a standalone image; the rest
     // export exactly as shown on screen. boost applies at flat (e=0) and ramps to none by iso (e=1).
@@ -580,7 +588,7 @@
 
     function savePng() {
       renderExportFrame(0, 0) // flat top-down → the scannable still
-      download(compositor.toDataURL('image/png'), `qr-${currentModel}.png`)
+      download(compositor.toDataURL('image/png'), exportName('', 'png'))
     }
     savePngBtn.addEventListener('click', savePng)
 
@@ -623,7 +631,7 @@
         const blob = new Blob(chunks, { type: mime })
         const ext = mime.includes('mp4') ? 'mp4' : 'webm'
         const url = URL.createObjectURL(blob)
-        download(url, `qr-${currentModel}-loop.${ext}`)
+        download(url, exportName('-loop', ext))
         setTimeout(() => URL.revokeObjectURL(url), 5000)
         recOverlay.classList.remove('on'); exporting = false; setBusy(false, 'recording…')
         recordBtn.textContent = 'record loop'
@@ -678,7 +686,7 @@
       }
       gif.on('progress', p => { recLabel.textContent = `encoding gif… ${Math.round(p * 100)}%` })
       gif.on('finished', blob => {
-        download(URL.createObjectURL(blob), `qr-${currentModel}-loop.gif`)
+        download(URL.createObjectURL(blob), exportName('-loop', 'gif'))
         recOverlay.classList.remove('on'); exporting = false; setBusy(false); recordBtn.textContent = 'record loop'
       })
       gif.render()
