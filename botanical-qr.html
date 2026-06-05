@@ -665,7 +665,7 @@
     function savePng() {
       renderExportFrame(0, 0) // flat top-down → the scannable still
       const blob = pngWithText(compositor.toDataURL('image/png'), {
-        Author: 'Khoo Pyn Zhern', Copyright: '(c) Khoo Pyn Zhern - pynzhern.com', Software: 'Botanical QR - pynzhern.com'
+        Copyright: '(c) Khoo Pyn Zhern, pynzhern.com'
       })
       const url = URL.createObjectURL(blob)
       download(url, exportName('', 'png'))
