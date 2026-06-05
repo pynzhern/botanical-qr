@@ -9,7 +9,10 @@ Open any file directly, or serve the folder (`python3 -m http.server`) and visit
 ### Caladium
 - **`caladium-qr-match.html`** — potted caladium, **geometry-matched**: leaves climb a central stem (golden-angle spiral), thin (1 voxel), each coloured by the module beneath it so the variegation *is* the QR. The exposed top facet per cell carries the code; occluded under-leaves stay botanical (magenta midrib → pink blade → veins → green margin). Higher-res QR (level H), monotone floor, terracotta pot, gentle sway. **Flat state is jsQR decode-verified.**
 - **`caladium-qr-fit.html`** — H, **fit + cohesive**: the plant is *scaled* (not clipped) so every whole leaf stays inside the tile's inscribed circle ⊂ the square, for any QR — no overhang. Every leaf cell is mottled by the module under it (exposed tops = real QR, lower leaves = matching decorative "mock" mottle) so the whole plant reads as one cohesive variegated thing, no botanical-vs-codey seam. Bigger leaves (small base offset), bigger pot scaled to the grid.
-- **`caladium-qr-m-fit.html`** — the fit + cohesive caladium at **error-correction level M** (chunkier, calmer mottle).
+- **`caladium-qr-fit-v2.html`** — iteration on `-fit`: **per-leaf square fit** — each leaf grows to the *square* edge in its own direction (not the inscribed circle), so corner-pointing leaves get bigger and the plant fans out to fill the tile. More leaves. Still no overhang.
+- **`caladium-qr-m-fit.html`** / **`caladium-qr-m-fit-v2.html`** — the fit + cohesive caladium at **error-correction level M** (chunkier, calmer mottle); `-v2` has the same fan-out.
+
+> **Versioning:** every visual iteration is kept as its own `…-vN.html` so they can be compared side by side — nothing is overwritten.
 - **`caladium-qr-nooverhang.html`** — earlier attempt: leaves hard-*clipped* to the square (edge leaves trimmed). Superseded by `-fit` (which scales instead of cutting).
 - **`caladium-qr-m.html`** — matched caladium at level M with overhang.
 - **`caladium-qr.html`** — earlier elegant version with freely arching leaves that *fade* on flatten (palette-matched, not geometry-matched).
