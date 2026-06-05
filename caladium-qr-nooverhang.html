@@ -39,9 +39,9 @@
   <div id="app"></div>
   <div class="hud">
     <div class="top">
-      <div class="eyebrow">caladium qr · matched (variegation)</div>
-      <div class="title">the leaves' variegation IS the QR</div>
-      <div class="sub">leaves are grid-aligned sheets floating on stalks (empty beneath) — tilted by varying each cell's height, not by moving it sideways. each cell is dark or pale by the module under it, so the mottling is the QR and the top-down scans.</div>
+      <div class="eyebrow">caladium qr · no overhang (H)</div>
+      <div class="title">leaves clipped to the QR square</div>
+      <div class="sub">same matched caladium, but every leaf is clipped to the tile — nothing extends past the QR square. edge leaves get trimmed at the boundary. compare against the overhang version.</div>
     </div>
     <div class="bottom">
       <span class="hint">drag to spin · tap to flatten / tilt</span>
@@ -134,16 +134,13 @@
     // on-tile cells carry the QR (dark/pale by module); overhang cells are pale → light quiet zone
     // on-tile cells stored with metadata (coloured later: topmost→QR, occluded→botanical); off-tile overhang fades
     function pushCell(onOut, offOut, col, row, H, offset, zone, gridSize) {
-      const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
-      if (onTile) onOut.push({ col, row, H, zone })
-      else offOut.push({ x: col - offset, y: H, z: row - offset, c: ZN[zone] })
+      // NO OVERHANG: leaves are clipped to the QR square — off-tile cells are dropped entirely
+      if (col >= 0 && row >= 0 && col < gridSize && row < gridSize) onOut.push({ col, row, H, zone })
     }
     // stalk voxel snapped to the grid; pre-coloured by module so it's QR-correct wherever exposed
     function pushStalk(onOut, offOut, wx, wy, wz, matrix, offset, gridSize) {
       const col = Math.round(wx + offset), row = Math.round(wz + offset)
-      const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
-      if (onTile) onOut.push({ col, row, H: wy, c: matrix[row][col] ? STALK_DARK : GREEN_PALE, fixed: true })
-      else offOut.push({ x: col - offset, y: wy, z: row - offset, c: GREEN_PALE })
+      if (col >= 0 && row >= 0 && col < gridSize && row < gridSize) onOut.push({ col, row, H: wy, c: matrix[row][col] ? STALK_DARK : GREEN_PALE, fixed: true })
     }
 
     // grid-aligned heart leaf: one voxel per covered cell. it ARCHES (rise then nod over) by
@@ -401,6 +398,7 @@
     input.value = DEFAULT_CONTENT
     function toggle() {
       target = target === 0 ? 1 : 0
+      if (target === 0) az = Math.atan2(Math.sin(az), Math.cos(az)) // un-spin the shortest way back to top-down
       btn.textContent = target === 1 ? 'flatten to QR' : 'grow caladium'
     }
     btn.addEventListener('click', toggle)

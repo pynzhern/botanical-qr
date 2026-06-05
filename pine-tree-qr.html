@@ -41,9 +41,9 @@
   <div id="app"></div>
   <div class="hud">
     <div class="top">
-      <div class="eyebrow">pine tree qr · prototype</div>
-      <div class="title">a single pine, grown from a link</div>
-      <div class="sub">the QR lays flat on the ground; dark modules near the centre rise into a trunk and a conical canopy. tap to tilt between scannable QR and 3D pine.</div>
+      <div class="eyebrow">pine tree qr · matched</div>
+      <div class="title">the needles ARE the QR</div>
+      <div class="sub">a conical canopy of grid-aligned voxels; each needle's top is dark or pale green by the module under it, so the canopy carries the QR — the top-down scans and the 3D tree shows the code. tap to tilt.</div>
     </div>
     <div class="bottom">
       <span class="hint">tap the scene to flatten / tilt</span>
@@ -70,16 +70,14 @@
     const CANOPY_OUTER_RADIUS_FACTOR = 0.46
     const DEFAULT_CONTENT = 'https://pynzhern.com'
 
-    const BlockType = { Dirt: 0, Pine: 1, Trunk: 2, Grass: 3, Litter: 4 }
-
-    // forest-floor palette
-    const PALETTE = {
-      0: '#d8c9a4', // dirt — light path (QR "light")
-      2: '#6b4a32', // trunk — brown
-      3: '#6f8f5a', // grass — mossy ground (QR dark, outside canopy)
-      4: '#a8945f'  // litter — fallen needles (QR dark, under canopy on ground)
-    }
-    const PINE_LOW = new THREE.Color('#27512f')
+    // matched palette — like the caladium, the topmost voxel per cell is coloured by the QR module
+    // (dark green for dark, pale green for light) so the canopy ITSELF carries the QR and reads in 3D.
+    const FLOOR_DARK = new THREE.Color('#4a5a3a')  // monotone forest floor (dark module)
+    const CREAM = new THREE.Color('#d8c9a4')        // dirt path (light module)
+    const TRUNK = new THREE.Color('#6b4a32')        // brown trunk (occluded under the canopy)
+    const PINE_DARK = new THREE.Color('#27512f')    // dark-module needles
+    const PINE_PALE = new THREE.Color('#c3d6ab')    // light-module needles (frosted variegation)
+    const PINE_LOW = new THREE.Color('#27512f')     // occluded needles: low → high gradient
     const PINE_HIGH = new THREE.Color('#3f7a44')
 
     // ---- QR → boolean matrix (verbatim from their qr-matrix.ts) ------------
@@ -100,66 +98,55 @@
       return s - Math.floor(s)
     }
 
-    // ---- 3-pass voxel generator (their block-generator.ts, canopy = cone) --
+    // ---- matched voxel generator: cone canopy whose TOP carries the QR ------
     function generateBlocks(matrix) {
       const gridSize = matrix.length
-      const cx = gridSize / 2
-      const cy = gridSize / 2
-      const canopyBaseHeight = TRUNK_LAYERS * CUBE
-      const canopyOuterRadius = gridSize * CANOPY_OUTER_RADIUS_FACTOR
+      const cx = (gridSize - 1) / 2, cy = (gridSize - 1) / 2
+      const canopyBase = TRUNK_LAYERS * CUBE
+      const canopyR = gridSize * CANOPY_OUTER_RADIUS_FACTOR
 
-      const blocks = [] // { col, row, baseY, type, shade }
+      // ground: monotone QR floor (shows where the canopy doesn't cover — the finders, the outer ring)
+      const ground = []
+      for (let row = 0; row < gridSize; row++)
+        for (let col = 0; col < gridSize; col++)
+          ground.push({ col, row, baseY: 0, c: matrix[row][col] ? FLOOR_DARK : CREAM })
 
-      // pass 1 — ground layer (dirt / grass / litter / trunk base)
-      for (let row = 0; row < gridSize; row++) {
+      const vox = [] // { col, row, baseY, nat, c }
+      // trunk column at the centre (stays brown — occluded under the canopy)
+      for (let row = 0; row < gridSize; row++)
         for (let col = 0; col < gridSize; col++) {
-          const dark = matrix[row][col]
-          const dist = Math.hypot(col - cx, row - cy)
-          let type
-          if (!dark) type = BlockType.Dirt
-          else if (dist < TRUNK_RADIUS) type = BlockType.Trunk
-          else if (dist >= canopyOuterRadius) type = BlockType.Grass
-          else type = BlockType.Litter
-          blocks.push({ col, row, baseY: 0, type, shade: 0 })
-        }
-      }
-
-      // pass 2 — trunk stacked vertically
-      for (let row = 0; row < gridSize; row++) {
-        for (let col = 0; col < gridSize; col++) {
-          if (!matrix[row][col]) continue
           if (Math.hypot(col - cx, row - cy) >= TRUNK_RADIUS) continue
-          for (let layer = 1; layer < TRUNK_LAYERS; layer++) {
-            blocks.push({ col, row, baseY: layer * CUBE, type: BlockType.Trunk, shade: 0 })
-          }
+          for (let layer = 0; layer < TRUNK_LAYERS; layer++) vox.push({ col, row, baseY: layer * CUBE, nat: TRUNK })
         }
-      }
-
-      // pass 3 — conical canopy: layer count shrinks with distance → a cone
-      for (let row = 0; row < gridSize; row++) {
+      // conical canopy over the WHOLE central disc — dark AND light cells, so the QR mottles the needles
+      for (let row = 0; row < gridSize; row++)
         for (let col = 0; col < gridSize; col++) {
-          if (!matrix[row][col]) continue
           const dist = Math.hypot(col - cx, row - cy)
-          if (dist >= canopyOuterRadius) continue
-
-          const t = 1 - dist / canopyOuterRadius        // 1 centre → 0 edge
+          if (dist >= canopyR) continue
+          const t = 1 - dist / canopyR                    // 1 centre → 0 edge
           const jitter = pseudoRandom(col, row, 500) - 0.5
-          const layersHere = Math.max(1, Math.round(MAX_CANOPY_LAYERS * t + jitter))
-
-          for (let layer = 0; layer < layersHere; layer++) {
-            const baseY = canopyBaseHeight + layer * CUBE
-            const shade = layersHere > 1 ? layer / (layersHere - 1) : 1 // darker low, lighter up
-            blocks.push({ col, row, baseY, type: BlockType.Pine, shade })
+          const layers = Math.max(1, Math.round(MAX_CANOPY_LAYERS * t + jitter * 1.6))
+          for (let layer = 0; layer < layers; layer++) {
+            const shade = layers > 1 ? layer / (layers - 1) : 1
+            vox.push({ col, row, baseY: canopyBase + layer * CUBE, nat: PINE_LOW.clone().lerp(PINE_HIGH, shade) })
           }
         }
+
+      // topmost voxel per cell carries the QR (dark/pale needle by module); the rest stay natural pine
+      const cellTop = new Map()
+      for (const v of vox) { const k = v.col * 4096 + v.row; const m = cellTop.get(k); if (m === undefined || v.baseY > m) cellTop.set(k, v.baseY) }
+      let maxY = 0
+      for (const v of vox) {
+        v.c = v.baseY >= cellTop.get(v.col * 4096 + v.row) - 0.001 ? (matrix[v.row][v.col] ? PINE_DARK : PINE_PALE) : v.nat
+        if (v.baseY > maxY) maxY = v.baseY
       }
 
-      return { blocks, gridSize }
+      return { ground, vox, gridSize, maxY }
     }
 
     // ---- scene -------------------------------------------------------------
     const app = document.getElementById('app')
-    const renderer = new THREE.WebGLRenderer({ antialias: true })
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.setSize(window.innerWidth, window.innerHeight)
     renderer.outputColorSpace = THREE.SRGBColorSpace
@@ -184,25 +171,23 @@
 
     let mesh = null
     let gridSize = 0
+    let plantMaxY = 0
     const tmpObj = new THREE.Object3D()
-    const tmpCol = new THREE.Color()
 
     function build(content) {
-      const { blocks, gridSize: g } = generateBlocks(generateQRMatrix(content))
-      gridSize = g
+      const data = generateBlocks(generateQRMatrix(content))
+      gridSize = data.gridSize; plantMaxY = data.maxY
       const offset = (gridSize - 1) / 2
+      const all = data.ground.concat(data.vox)
 
       if (mesh) { model.remove(mesh); mesh.dispose() }
-      mesh = new THREE.InstancedMesh(cubeGeo, cubeMat, blocks.length)
-
-      for (let i = 0; i < blocks.length; i++) {
-        const b = blocks[i]
+      mesh = new THREE.InstancedMesh(cubeGeo, cubeMat, all.length)
+      for (let i = 0; i < all.length; i++) {
+        const b = all[i]
         tmpObj.position.set(b.col - offset, b.baseY + CUBE / 2, b.row - offset)
         tmpObj.updateMatrix()
         mesh.setMatrixAt(i, tmpObj.matrix)
-        if (b.type === BlockType.Pine) tmpCol.copy(PINE_LOW).lerp(PINE_HIGH, b.shade)
-        else tmpCol.set(PALETTE[b.type])
-        mesh.setColorAt(i, tmpCol)
+        mesh.setColorAt(i, b.c)
       }
       mesh.instanceMatrix.needsUpdate = true
       mesh.instanceColor.needsUpdate = true

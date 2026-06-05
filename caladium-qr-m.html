@@ -39,9 +39,9 @@
   <div id="app"></div>
   <div class="hud">
     <div class="top">
-      <div class="eyebrow">caladium qr · matched (variegation)</div>
+      <div class="eyebrow">caladium qr · matched (M level)</div>
       <div class="title">the leaves' variegation IS the QR</div>
-      <div class="sub">leaves are grid-aligned sheets floating on stalks (empty beneath) — tilted by varying each cell's height, not by moving it sideways. each cell is dark or pale by the module under it, so the mottling is the QR and the top-down scans.</div>
+      <div class="sub">error-correction level M — fewer, bigger pixels than the H version. less data redundancy (so artistic colouring is riskier to scan) but a chunkier, calmer leaf mottle. compare against the H version.</div>
     </div>
     <div class="bottom">
       <span class="hint">drag to spin · tap to flatten / tilt</span>
@@ -90,10 +90,8 @@
     const POT_SOIL = new THREE.Color('#4f3b2a')
 
     function generateQRMatrix(content) {
-      // default to a higher version → more pixels to play with; fall back to auto if the data is too big
-      let data
-      try { data = QRCode.create(content || DEFAULT_CONTENT, { errorCorrectionLevel: 'H', version: 9 }) }
-      catch (e) { data = QRCode.create(content || DEFAULT_CONTENT, { errorCorrectionLevel: 'H' }) }
+      // error-correction level M → fewer, bigger modules (auto version)
+      const data = QRCode.create(content || DEFAULT_CONTENT, { errorCorrectionLevel: 'M' })
       const size = data.modules.size
       const matrix = []
       for (let y = 0; y < size; y++) {

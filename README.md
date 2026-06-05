@@ -7,13 +7,15 @@ Open any file directly, or serve the folder (`python3 -m http.server`) and visit
 ## Builds
 
 ### Caladium
-- **`caladium-qr-match.html`** — potted caladium, **geometry-matched**: leaves are grid-aligned voxel sheets, one per QR cell, arched by varying each cell's height (never moving it sideways) so the top-down projection *is* the QR. Each cell is coloured by the module beneath it — dark module → deep pink/green, light → pale — so the leaf variegation encodes the code. Only the exposed top facet per cell carries the QR; occluded under-leaves are painted organic botanical variegation, so the plant reads lush rather than code-like. Overhang lives in a separate mesh that fades when flat (clean square). Green petioles, terracotta pot, drifting petals, gentle sway. **Flat state is jsQR decode-verified.**
-- **`caladium-qr.html`** — earlier elegant version with freely arching leaves. Prettier silhouette, but the leaves *fade* on flatten (palette-matched, not geometry-matched — the flat QR is read from the ground layer).
+- **`caladium-qr-match.html`** — potted caladium, **geometry-matched**: leaves climb a central stem (golden-angle spiral), thin (1 voxel), each coloured by the module beneath it so the variegation *is* the QR. The exposed top facet per cell carries the code; occluded under-leaves stay botanical (magenta midrib → pink blade → veins → green margin). Higher-res QR (level H), monotone floor, terracotta pot, gentle sway. **Flat state is jsQR decode-verified.**
+- **`caladium-qr-nooverhang.html`** — same matched caladium but every leaf is **clipped to the QR square** (nothing extends past the tile; edge leaves are trimmed). Compare against the overhang version.
+- **`caladium-qr-m.html`** — matched caladium at **error-correction level M** (fewer, bigger pixels → chunkier, calmer mottle; less redundancy). Compare against the H version.
+- **`caladium-qr.html`** — earlier elegant version with freely arching leaves that *fade* on flatten (palette-matched, not geometry-matched).
 
 ### Pine
+- **`pine-tree-qr.html`** — single pine, now **geometry-matched** like the caladium: a conical canopy of grid-aligned voxels whose topmost needle per cell is dark or pale green by the module under it, so the QR shows *in the 3D tree* and the top-down scans (jsQR decode-verified). A monotone forest floor carries the QR outside the canopy. No snow.
 - **`pine-tree-qr-toy.html`** — tiered fir with a forest/snow switch, drag-to-orbit, canopy sway, and falling needles/snow.
 - **`pine-tree-qr-compare.html`** — single cone vs tiered fir vs snow, side by side.
-- **`pine-tree-qr.html`** — single pine: flat QR ground tile that rises into an isometric voxel tree.
 
 ## How the matching works
 
