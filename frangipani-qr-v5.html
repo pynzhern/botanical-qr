@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Frangipani QR — matched v5 (colour)</title>
+  <style>
+    :root { --ink: #243024; --muted: #586253; --accent: #5f8a4c; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #eef0e6; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+    #app { position: fixed; inset: 0; }
+    canvas { display: block; touch-action: none; }
+    .hud { position: fixed; inset: 0; pointer-events: none; padding: 26px;
+      display: flex; flex-direction: column; justify-content: space-between; }
+    .eyebrow { font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+    .title { font-size: 24px; font-weight: 650; color: var(--ink); letter-spacing: -0.01em; margin-top: 4px; }
+    .sub { font-size: 13px; color: var(--muted); max-width: 38ch; line-height: 1.45; margin-top: 6px; }
+    .bottom { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+    .controls { pointer-events: auto; display: flex; gap: 10px; align-items: center; }
+    input { font: inherit; font-size: 14px; color: var(--ink); background: #fff;
+      border: 1px solid rgba(36,48,36,0.16); border-radius: 12px; padding: 10px 14px; width: 220px; outline: none; }
+    input:focus { border-color: var(--accent); }
+    button { font: inherit; font-size: 13px; font-weight: 600; color: var(--ink); background: rgba(255,255,255,0.7);
+      -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border: 1px solid rgba(36,48,36,0.14);
+      border-radius: 999px; padding: 10px 18px; cursor: pointer; transition: background 0.2s, transform 0.1s; }
+    button:hover { background: #fff; }
+    button:active { transform: scale(0.97); }
+    .hint { font-size: 12px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div class="hud">
+    <div class="top">
+      <div class="eyebrow">frangipani qr · matched · v5 (researched colour)</div>
+      <div class="title">a rosette that scans</div>
+      <div class="sub">researched palette: elliptic dark-green leaves with a pale midrib, white-and-gold blooms, grey-green scaly bark, black nursery pot. paddle leaves fan from the trunk, a white/gold bloom cluster sits at the centre. every cell coloured by its module, fanned to fill the square. trunk + pot fade when flat.</div>
+    </div>
+    <div class="bottom">
+      <span class="hint">drag to spin · tap to flatten / tilt</span>
+      <div class="controls">
+        <input id="content" type="url" spellcheck="false" autocomplete="off" autocapitalize="off" />
+        <button id="toggle">flatten to QR</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="importmap">
+  { "imports": { "three": "https://esm.sh/three@0.160.0" } }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three'
+    import QRCode from 'https://esm.sh/qrcode@1.5.3'
+
+    const CUBE = 1
+    const DEFAULT_CONTENT = 'https://pynzhern.com'
+    const LEN = 2.8
+
+    // researched frangipani palette (scanners read luminance, so dark stays dark / light stays light) ----
+    const CREAM = '#e8e1d2'            // warm pale floor
+    const FLOOR_DARK = '#45433b'       // warm dark grey floor
+    const CREAM_C = new THREE.Color(CREAM), FLOOR_DARK_C = new THREE.Color(FLOOR_DARK)
+    const PETIOLE_DARK = new THREE.Color('#2c4a26'), PETIOLE_PALE = new THREE.Color('#cde0b0')
+    // elliptic dark-green leaf with a pale midrib/veins — deep glossy green (dark module) + cream-sage highlight (light)
+    const ZD = { midrib: new THREE.Color('#15391b'), blade: new THREE.Color('#214f27'), vein: new THREE.Color('#1b4621'), margin: new THREE.Color('#163c1b') }
+    const ZL = { midrib: new THREE.Color('#eaeed1'), blade: new THREE.Color('#c4d8a8'), vein: new THREE.Color('#dbe7bf'), margin: new THREE.Color('#b3c79a') }
+    const ZN = { midrib: new THREE.Color('#244a1f'), blade: new THREE.Color('#345c2c'), vein: new THREE.Color('#dbe7bf'), margin: new THREE.Color('#163c1b') }
+    // white petals, golden-yellow throat (the iconic frangipani flower); dark cells = buds
+    const BLOOM = [new THREE.Color('#fdfcf7'), new THREE.Color('#f7f2e6'), new THREE.Color('#f3c53a'), new THREE.Color('#f2d6d2')] // white / warm-white / gold / pink
+    const BUD = [new THREE.Color('#2c4a26'), new THREE.Color('#6f4a3e')]
+    const POT_R = 8.5, POT_H = 11
+    const POT_BODY = new THREE.Color('#2b2b2d'), POT_RIM = new THREE.Color('#393939'), POT_SOIL = new THREE.Color('#221e19') // black nursery pot
+    const TRUNK_C = new THREE.Color('#9aa291')   // grey-green scaly bark
+
+    function generateQRMatrix(content) {
+      let data
+      try { data = QRCode.create(content || DEFAULT_CONTENT, { errorCorrectionLevel: 'H', version: 9 }) }
+      catch (e) { data = QRCode.create(content || DEFAULT_CONTENT, { errorCorrectionLevel: 'H' }) }
+      const size = data.modules.size
+      const matrix = []
+      for (let y = 0; y < size; y++) { const row = []; for (let x = 0; x < size; x++) row.push(data.modules.get(x, y) === 1); matrix.push(row) }
+      return matrix
+    }
+    function pseudoRandom(a, b, seed) { const s = Math.sin(a * 127.1 + b * 311.7 + seed * 43.7) * 43758.5; return s - Math.floor(s) }
+    function frac(x) { return x - Math.floor(x) }
+    function paddle(u, v) {
+      if (v < 0 || v > 1) return false
+      const w = Math.pow(Math.sin(Math.PI * Math.pow(Math.min(1, v), 0.8)), 0.55)
+      return Math.abs(u) <= w
+    }
+    function leafZone(u, v, e1, e2) {
+      if (e1 || e2) return 'margin'
+      const t = Math.abs(u)
+      if (t < 0.10) return 'midrib'
+      if (frac(v * 7 - t * 3) < 0.10) return 'vein'
+      return 'blade'
+    }
+
+    function pushCell(onOut, offOut, col, row, H, offset, zone, gridSize) {
+      const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
+      if (onTile) onOut.push({ col, row, H, zone })
+      else offOut.push({ x: col - offset, y: H, z: row - offset, color: ZN[zone] })
+    }
+    function pushStalk(onOut, offOut, wx, wy, wz, matrix, offset, gridSize) {
+      const col = Math.round(wx + offset), row = Math.round(wz + offset)
+      const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
+      if (onTile) onOut.push({ col, row, H: wy, color: matrix[row][col] ? PETIOLE_DARK : PETIOLE_PALE, fixed: true })
+      else offOut.push({ x: col - offset, y: wy, z: row - offset, color: PETIOLE_PALE })
+    }
+
+    function buildLeaf(onOut, offOut, leaf, matrix, offset, gridSize, baseY0) {
+      const { cx, cz, az, size, baseH, rise, droop, cup } = leaf
+      const ca = Math.cos(az), sa = Math.sin(az)
+      const du = 1 / size, dv = 1 / (size * LEN)
+      const ext = Math.ceil(size * (LEN + 0.6))
+      const ccol = Math.round(cx + offset), crow = Math.round(cz + offset)
+      let lmaxY = baseH
+      const sSteps = Math.ceil(Math.hypot(cx, cz) + Math.abs(baseH - baseY0)) + 1
+      for (let s = 0; s <= sSteps; s++) {
+        const f = s / sSteps
+        pushStalk(onOut, offOut, cx * f, baseY0 + (baseH - baseY0) * f, cz * f, matrix, offset, gridSize)
+      }
+      for (let col = ccol - ext; col <= ccol + ext; col++) {
+        for (let row = crow - ext; row <= crow + ext; row++) {
+          const dx = (col - offset) - cx, dz = (row - offset) - cz
+          const lz = dx * ca + dz * sa, lx = -dx * sa + dz * ca
+          const u = lx / size, v = lz / (size * LEN)
+          if (v < 0 || v > 1 || u < -1 || u > 1) continue
+          if (!paddle(u, v)) continue
+          const e1 = !paddle(u + du, v) || !paddle(u - du, v) || !paddle(u, v + dv) || !paddle(u, v - dv)
+          const e2 = !paddle(u + 2 * du, v) || !paddle(u - 2 * du, v) || !paddle(u, v + 2 * dv) || !paddle(u, v - 2 * dv)
+          const zone = leafZone(u, v, e1, e2)
+          const H = baseH + v * rise - droop * v * v - cup * u * u
+          pushCell(onOut, offOut, col, row, Math.max(2, H), offset, zone, gridSize)
+          if (H > lmaxY) lmaxY = H
+        }
+      }
+      return lmaxY
+    }
+
+    function buildPot(out, potR, potH) {
+      for (let ly = 0; ly < potH; ly++) {
+        const rOut = potR * (0.72 + 0.28 * ly / (potH - 1))
+        const rIn = rOut - 1.6
+        const rim = ly === potH - 1
+        const m = Math.ceil(potR)
+        for (let x = -m; x <= m; x++) for (let z = -m; z <= m; z++) {
+          const d = Math.hypot(x, z)
+          if (d <= rOut && d >= rIn) out.push({ x, y: ly, z, color: rim ? POT_RIM : POT_BODY })
+        }
+      }
+      const mf = Math.ceil(potR), soilTop = potH - 2
+      for (let ly = soilTop; ly >= Math.max(0, soilTop - 2); ly--) {
+        const rFill = potR * (0.72 + 0.28 * ly / (potH - 1)) - 1.1
+        for (let x = -mf; x <= mf; x++) for (let z = -mf; z <= mf; z++)
+          if (Math.hypot(x, z) <= rFill) out.push({ x, y: ly, z, color: POT_SOIL })
+      }
+    }
+    function buildTrunk(out, trunkR, potH, trunkTop) {
+      const m = Math.ceil(trunkR)
+      for (let ly = potH - 1; ly <= trunkTop; ly++) {
+        const r = trunkR * (1 - 0.16 * (ly - potH) / Math.max(1, trunkTop - potH))
+        for (let x = -m; x <= m; x++) for (let z = -m; z <= m; z++)
+          if (Math.hypot(x, z) <= r) out.push({ x, y: ly, z, color: TRUNK_C })
+      }
+    }
+
+    function generatePlant(matrix) {
+      const gridSize = matrix.length
+      const offset = (gridSize - 1) / 2
+      const sc = gridSize / 33
+
+      const ground = []
+      let dark = 0, total = 0
+      for (let row = 0; row < gridSize; row++) for (let col = 0; col < gridSize; col++) {
+        const isDark = matrix[row][col]; total++; if (isDark) dark++
+        ground.push({ x: col - offset, y: 0, z: row - offset, color: isDark ? FLOOR_DARK_C : CREAM_C })
+      }
+
+      const potR = POT_R * sc, potH = Math.max(4, Math.round(POT_H * sc))
+      const trunkR = Math.max(1.8, 2.7 * sc)
+      const trunkTop = potH + Math.round(gridSize * 0.30)
+      const pot = []; buildPot(pot, potR, potH)
+      const trunk = []; buildTrunk(trunk, trunkR, potH, trunkTop)
+
+      const leaves = [], overhang = []
+      const MAX_TILT = 1.4
+      const N = Math.max(9, Math.min(11, 9 + Math.round((dark / total) * 3)))
+      const GOLDEN = 2.39996323
+
+      const defs = []
+      for (let k = 0; k < N; k++) {
+        const qrBit = matrix[(k * 7) % gridSize][(k * 13) % gridSize] ? 1 : 0
+        const r2 = pseudoRandom(k, 2, qrBit + 3), r4 = pseudoRandom(k, 8, qrBit + 2)
+        const r5 = pseudoRandom(k, 11, qrBit + 9), r6 = pseudoRandom(k, 13, qrBit)
+        defs.push({
+          az: k * GOLDEN,
+          rc: (1.0 + r5 * 1.2) * sc,
+          climbH: (r6 * 5 - 1) * sc,
+          size: (15 + r2 * 4) * sc,
+          rise: (16 + r6 * 6) * sc, droop: (5 + r4 * 4) * sc, cup: (2.5 + r2 * 2) * sc
+        })
+      }
+      const S = gridSize * 0.5 - 0.3
+      let maxY = 0, maxR = 0
+      for (const d of defs) {
+        const cA = Math.abs(Math.cos(d.az)), sA = Math.abs(Math.sin(d.az))
+        const reach = d.rc + d.size * LEN, lat = d.size * 0.85
+        const bx = reach * cA + lat * sA, bz = reach * sA + lat * cA
+        const f = Math.min(2, S / Math.max(bx, bz))
+        const rc = d.rc * f, size = d.size * f
+        const baseH = trunkTop + Math.max(d.climbH, rc / MAX_TILT)
+        const leaf = { cx: Math.cos(d.az) * rc, cz: Math.sin(d.az) * rc, az: d.az, size, baseH, rise: d.rise * f, droop: d.droop * f, cup: d.cup * f }
+        const ly = buildLeaf(leaves, overhang, leaf, matrix, offset, gridSize, trunkTop)
+        if (ly > maxY) maxY = ly
+        const rr = rc + size * LEN; if (rr > maxR) maxR = rr
+      }
+      if (potR > maxR) maxR = potR
+
+      const bloomR = Math.max(3.5, 6 * sc)
+      const bmf = Math.ceil(bloomR)
+      const ccol = Math.round(offset), crow = Math.round(offset)
+      for (let dcol = -bmf; dcol <= bmf; dcol++) for (let drow = -bmf; drow <= bmf; drow++) {
+        const col = ccol + dcol, row = crow + drow
+        if (col < 0 || row < 0 || col >= gridSize || row >= gridSize) continue
+        const d = Math.hypot(dcol, drow)
+        if (d > bloomR) continue
+        const mound = Math.sqrt(Math.max(0, 1 - (d / bloomR) ** 2))
+        const H = trunkTop + 4 + Math.round(mound * 6 * sc)
+        const light = !matrix[row][col]
+        const rr = pseudoRandom(col, row, 21)
+        const color = light ? BLOOM[rr < 0.16 ? 2 : rr < 0.22 ? 3 : rr < 0.58 ? 1 : 0] : BUD[rr < 0.3 ? 1 : 0]
+        leaves.push({ col, row, H, color, fixed: true })
+        if (H > maxY) maxY = H
+      }
+
+      for (const v of leaves) {
+        v.x = v.col - offset; v.z = v.row - offset; v.y = v.H
+        if (v.fixed) { v.c = v.color; continue }
+        v.c = matrix[v.row][v.col] ? ZD[v.zone] : ZL[v.zone]
+      }
+      for (const v of overhang) v.c = v.color
+
+      return { ground, pot, trunk, leaves, overhang, gridSize, maxY, maxR }
+    }
+
+    // ---- scene -------------------------------------------------------------
+    const app = document.getElementById('app')
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.setSize(window.innerWidth, window.innerHeight)
+    renderer.outputColorSpace = THREE.SRGBColorSpace
+    app.appendChild(renderer.domElement)
+
+    const scene = new THREE.Scene()
+    scene.background = new THREE.Color('#eef0e6')
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 8000)
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xa6a89a, 1.04))
+    const sun = new THREE.DirectionalLight(0xffffff, 1.16); sun.position.set(-10, 28, 12); scene.add(sun)
+
+    const cubeGeo = new THREE.BoxGeometry(CUBE, CUBE, CUBE)
+    const groundMat = new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true })
+    const leafMat = new THREE.MeshStandardMaterial({ roughness: 0.78, flatShading: true })   // glossier leaves
+    const overhangMat = new THREE.MeshStandardMaterial({ roughness: 0.78, flatShading: true, transparent: true, opacity: 1 })
+    const woodMat = new THREE.MeshStandardMaterial({ roughness: 0.92, flatShading: true, transparent: true, opacity: 1 })
+
+    let groundMesh = null, leafMesh = null, overhangMesh = null, potMesh = null, trunkMesh = null
+    let gridSize = 0, plantMaxY = 0, plantMaxR = 0
+    const obj = new THREE.Object3D()
+
+    function mkMesh(arr, mat, offset) {
+      const m = new THREE.InstancedMesh(cubeGeo, mat, arr.length)
+      for (let i = 0; i < arr.length; i++) {
+        const b = arr[i]
+        const x = b.x !== undefined ? b.x : b.col - offset
+        const z = b.z !== undefined ? b.z : b.row - offset
+        const y = (b.y !== undefined ? b.y : b.H)
+        obj.position.set(x, y + CUBE / 2, z)
+        obj.updateMatrix(); m.setMatrixAt(i, obj.matrix)
+        m.setColorAt(i, b.c || b.color)
+      }
+      m.instanceMatrix.needsUpdate = true
+      if (m.instanceColor) m.instanceColor.needsUpdate = true
+      return m
+    }
+
+    function build(content) {
+      const data = generatePlant(generateQRMatrix(content))
+      gridSize = data.gridSize; plantMaxY = data.maxY; plantMaxR = data.maxR
+      const offset = (gridSize - 1) / 2
+      for (const m of [groundMesh, leafMesh, overhangMesh, potMesh, trunkMesh]) if (m) { scene.remove(m); m.dispose() }
+      groundMesh = mkMesh(data.ground, groundMat, offset); scene.add(groundMesh)
+      potMesh = mkMesh(data.pot, woodMat, offset); scene.add(potMesh)
+      trunkMesh = mkMesh(data.trunk, woodMat, offset); scene.add(trunkMesh)
+      leafMesh = mkMesh(data.leaves, leafMat, offset); scene.add(leafMesh)
+      overhangMesh = mkMesh(data.overhang, overhangMat, offset); scene.add(overhangMesh)
+    }
+
+    // ---- camera: flat ↔ iso + drag orbit ----------------------------------
+    let t = 0, target = 1
+    let az = 0.7, el = 0.58
+    const pos = new THREE.Vector3(), tgt = new THREE.Vector3(), dir = new THREE.Vector3(), up = new THREE.Vector3()
+    const UP_FLAT = new THREE.Vector3(0, 0, -1), UP_ISO = new THREE.Vector3(0, 1, 0)
+    function easeInOut(x) { return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2 }
+
+    function frame(now) {
+      t += (target - t) * 0.10
+      if (Math.abs(target - t) < 0.0004) t = target
+      const e = easeInOut(t)
+      const w = window.innerWidth, h = window.innerHeight, aspect = w / h
+      const span = gridSize
+      const flatHalf = Math.max(span * 0.5, span / (2 * aspect)) * 1.14
+      const isoHalf = Math.max(span * 0.6, plantMaxR * 0.82, plantMaxY * 0.55) * 1.1
+      const halfH = flatHalf + (isoHalf - flatHalf) * e
+      camera.top = halfH; camera.bottom = -halfH; camera.left = -halfH * aspect; camera.right = halfH * aspect
+      camera.updateProjectionMatrix()
+
+      const elNow = (Math.PI / 2) * (1 - e) + el * e
+      const azNow = az * e
+      dir.set(Math.cos(elNow) * Math.sin(azNow), Math.sin(elNow), Math.cos(elNow) * Math.cos(azNow))
+      up.copy(UP_FLAT).lerp(UP_ISO, e).normalize()
+      tgt.set(0, plantMaxY * 0.42 * e, 0)
+      pos.copy(dir).multiplyScalar(span * 6).add(tgt)
+      camera.position.copy(pos); camera.up.copy(up); camera.lookAt(tgt)
+
+      const o = e <= 0.2 ? 0 : Math.min(1, (e - 0.2) / 0.55)
+      woodMat.opacity = o * o * (3 - 2 * o); overhangMat.opacity = o * o * (3 - 2 * o)
+      if (leafMesh) {
+        const tm = now / 1000
+        const sz = Math.sin(tm * 0.9) * 0.012 * e, sx = Math.cos(tm * 0.7) * 0.008 * e
+        leafMesh.rotation.z = sz; leafMesh.rotation.x = sx
+        if (overhangMesh) { overhangMesh.rotation.z = sz; overhangMesh.rotation.x = sx }
+      }
+      renderer.render(scene, camera)
+      requestAnimationFrame(frame)
+    }
+
+    // ---- interaction -------------------------------------------------------
+    const btn = document.getElementById('toggle')
+    const input = document.getElementById('content')
+    input.value = DEFAULT_CONTENT
+    function toggle() {
+      target = target === 0 ? 1 : 0
+      if (target === 0) az = Math.atan2(Math.sin(az), Math.cos(az))
+      btn.textContent = target === 1 ? 'flatten to QR' : 'grow frangipani'
+    }
+    btn.addEventListener('click', toggle)
+
+    let dragging = false, lastX = 0, lastY = 0, moved = 0
+    const cv = renderer.domElement
+    cv.addEventListener('pointerdown', ev => { dragging = true; lastX = ev.clientX; lastY = ev.clientY; moved = 0; cv.setPointerCapture(ev.pointerId) })
+    cv.addEventListener('pointermove', ev => {
+      if (!dragging) return
+      const dx = ev.clientX - lastX, dy = ev.clientY - lastY
+      lastX = ev.clientX; lastY = ev.clientY; moved += Math.abs(dx) + Math.abs(dy)
+      az -= dx * 0.006
+      el = Math.max(0.2, Math.min(1.45, el + dy * 0.005))
+    })
+    cv.addEventListener('pointerup', () => { dragging = false; if (moved < 6) toggle() })
+
+    let debounce = null
+    input.addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(() => build(input.value), 250) })
+    window.addEventListener('resize', () => renderer.setSize(window.innerWidth, window.innerHeight))
+
+    build(DEFAULT_CONTENT)
+    requestAnimationFrame(frame)
+  </script>
+</body>
+</html>
