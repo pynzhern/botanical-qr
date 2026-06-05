@@ -237,7 +237,7 @@
         const t = N > 1 ? k / (N - 1) : 0
         const d = {
           az: k * GOLDEN,
-          rc: (1.2 + r3 * 2) * sc,                            // small base offset → bigger leaves for the same square
+          rc: (0.9 + r3 * 1.7) * sc,                          // small base offset → bigger leaves for the same square
           climbH: (3 + t * 30 + r5 * 3) * sc,
           size: (9 + t * 2.5 + r2 * 3) * sc,                  // larger, more uniform leaves
           rise: (8 + r6 * 5) * sc, droop: (3 + r4 * 3) * sc, cup: (3 + r3 * 2.5) * sc
@@ -247,7 +247,7 @@
       }
       // FIT: shrink the horizontal extent so every leaf stays inside the tile's inscribed circle
       // (radius = gridSize/2, which is ⊂ the square) — holds for ANY QR size. 0.5-cell margin.
-      const fit = Math.min(1, (gridSize * 0.5 - 0.5) / maxReach)
+      const fit = Math.min(1, (gridSize * 0.5 - 0.3) / maxReach)
 
       let maxY = 0, maxR = 0
       for (const d of defs) {
