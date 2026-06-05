@@ -50,6 +50,15 @@
     }
     .btn:hover { background: #fff; }
     .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.45; cursor: default; transform: none; }
+
+    /* recording overlay: covers the frozen live view and shows the square loop being captured
+       (the export canvas must be on-screen for Safari to capture its stream) */
+    #recOverlay { position: fixed; inset: 0; z-index: 40; display: none; flex-direction: column;
+      align-items: center; justify-content: center; gap: 16px; background: var(--bg); transition: background 0.5s ease; }
+    #recOverlay.on { display: flex; }
+    #recOverlay canvas { width: 86vmin; height: 86vmin; border-radius: 16px; box-shadow: 0 18px 60px rgba(20,20,24,0.14); }
+    #recLabel { font-size: 13px; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
 
     #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
       color: var(--muted); font-size: 14px; letter-spacing: 0.04em; pointer-events: none; transition: opacity 0.4s; }
@@ -87,9 +96,13 @@
         </span>
         <input id="content" type="url" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="QR content URL" />
         <button class="btn" id="toggle">flatten to QR</button>
+        <button class="btn" id="savePng">save qr</button>
+        <button class="btn" id="recordLoop">record loop</button>
       </div>
     </div>
   </div>
+
+  <div id="recOverlay"><div id="recLabel">recording…</div></div>
 
   <script type="importmap">
   { "imports": { "three": "https://esm.sh/three@0.160.0" } }
@@ -428,38 +441,42 @@
     // ---- camera: flat ↔ iso morph + drag orbit ----------------------------
     let t = 0, target = 1
     let az = 0.7, el = 0.61
+    let exporting = false
     const pos = new THREE.Vector3(), tgt = new THREE.Vector3(), dir = new THREE.Vector3(), up = new THREE.Vector3()
     const UP_FLAT = new THREE.Vector3(0, 0, -1), UP_ISO = new THREE.Vector3(0, 1, 0)
     function easeInOut(x) { return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2 }
+    function fadeOpacity(e) { const o = e <= 0.2 ? 0 : Math.min(1, (e - 0.2) / 0.55); return o * o * (3 - 2 * o) }
 
-    function frame(now) {
-      t += (target - t) * 0.10
-      if (Math.abs(target - t) < 0.0004) t = target
-      const e = easeInOut(t)
-
-      const w = window.innerWidth, h = window.innerHeight, aspect = w / h
+    // place an ortho camera for a grow amount e (0 flat → 1 iso), azimuth and viewport aspect.
+    // shared by the live loop and the export renderer so what you record matches what you see.
+    function applyCamera(cam, e, azv, aspect) {
       const span = view.span
-      const flatHalf = Math.max(span * 0.5, span / (2 * aspect)) * 1.14
+      // +4 modules of quiet zone on the tight axis so coarse (level-M) codes still anchor their finders
+      const flatHalf = Math.max(span * 0.5 + 4, span / (2 * aspect)) * 1.06
       const isoHalf = Math.max(span * view.spanK, view.maxR * view.radK, view.maxY * view.heightK) * 1.1
       const halfH = flatHalf + (isoHalf - flatHalf) * e
-      camera.top = halfH; camera.bottom = -halfH; camera.left = -halfH * aspect; camera.right = halfH * aspect
-      camera.updateProjectionMatrix()
-
+      cam.top = halfH; cam.bottom = -halfH; cam.left = -halfH * aspect; cam.right = halfH * aspect
+      cam.updateProjectionMatrix()
       const elNow = (Math.PI / 2) * (1 - e) + el * e
-      const azNow = az * e
+      const azNow = azv * e
       dir.set(Math.cos(elNow) * Math.sin(azNow), Math.sin(elNow), Math.cos(elNow) * Math.cos(azNow))
       up.copy(UP_FLAT).lerp(UP_ISO, e).normalize()
       tgt.set(0, view.maxY * view.focusK * e, 0)
       pos.copy(dir).multiplyScalar(span * 6).add(tgt)
-      camera.position.copy(pos); camera.up.copy(up); camera.lookAt(tgt)
+      cam.position.copy(pos); cam.up.copy(up); cam.lookAt(tgt)
+    }
 
+    function frame(now) {
+      if (exporting) { requestAnimationFrame(frame); return } // export drives the scene; pause the live loop
+      t += (target - t) * 0.10
+      if (Math.abs(target - t) < 0.0004) t = target
+      const e = easeInOut(t)
+      applyCamera(camera, e, az, window.innerWidth / window.innerHeight)
       // fade material fades to nothing when flat → clean square QR; sway × e → 0 at rest so the match holds
-      const o = e <= 0.2 ? 0 : Math.min(1, (e - 0.2) / 0.55)
-      fadeMat.opacity = o * o * (3 - 2 * o)
+      fadeMat.opacity = fadeOpacity(e)
       const tm = now / 1000
       const sz = Math.sin(tm * 1.0) * 0.012 * e, sx = Math.cos(tm * 0.8) * 0.008 * e
       for (const m of meshes) if (m.sway) { m.mesh.rotation.z = sz; m.mesh.rotation.x = sx }
-
       renderer.render(scene, camera)
       requestAnimationFrame(frame)
     }
@@ -516,6 +533,109 @@
       seasonSeg.querySelectorAll('button').forEach(x => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on) })
       rebuild()
     })
+
+    // ---- export: a scannable still + a top-down → grow → orbit → flatten loop ----
+    const savePngBtn = document.getElementById('savePng')
+    const recordBtn = document.getElementById('recordLoop')
+    const recOverlay = document.getElementById('recOverlay')
+    const recLabel = document.getElementById('recLabel')
+    let exportRenderer = null, exportCamera = null, compositor = null, compCtx = null
+    const EXPORT_SIZE = 1080
+
+    function ensureExport() {
+      if (exportRenderer) return
+      exportRenderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })
+      exportRenderer.setPixelRatio(1)
+      exportRenderer.setSize(EXPORT_SIZE, EXPORT_SIZE, false)
+      exportRenderer.outputColorSpace = THREE.SRGBColorSpace
+      exportCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 8000)
+      // a 2D compositor is the on-screen, captured surface: it boosts contrast on the flat (scannable) frames
+      // so coarse level-M codes still decode, while the 3D orbit stays natural. captureStream reads it.
+      compositor = document.createElement('canvas'); compositor.width = EXPORT_SIZE; compositor.height = EXPORT_SIZE
+      compCtx = compositor.getContext('2d')
+      recOverlay.insertBefore(compositor, recLabel)
+    }
+    function clearSway() { for (const m of meshes) { m.mesh.rotation.z = 0; m.mesh.rotation.x = 0 } }
+    function download(href, name) { const a = document.createElement('a'); a.href = href; a.download = name; document.body.appendChild(a); a.click(); a.remove() }
+    // render one export frame (square, no HUD) into the compositor; contrast is full at flat (e=0), none in iso (e=1)
+    function renderExportFrame(e, azv) {
+      ensureExport(); clearSway()
+      fadeMat.opacity = fadeOpacity(e)
+      applyCamera(exportCamera, e, azv, 1)
+      exportRenderer.render(scene, exportCamera)
+      const K = 1 + 0.7 * (1 - Math.max(0, Math.min(1, e))) // crisp the scannable frames, leave the 3D look alone
+      compCtx.clearRect(0, 0, EXPORT_SIZE, EXPORT_SIZE)
+      compCtx.filter = `contrast(${Math.round(K * 100)}%)`
+      compCtx.drawImage(exportRenderer.domElement, 0, 0, EXPORT_SIZE, EXPORT_SIZE)
+      compCtx.filter = 'none'
+    }
+
+    function savePng() {
+      renderExportFrame(0, 0) // flat top-down → the scannable still
+      download(compositor.toDataURL('image/png'), `qr-${currentModel}.png`)
+    }
+    savePngBtn.addEventListener('click', savePng)
+
+    // capture timeline: hold flat → grow → full 360° orbit → flatten → hold. endpoints are the identical flat
+    // frame and az returns to 0 (≡ 2π), so the clip loops seamlessly with no extra un-spin on the flatten.
+    const EXP = { holdA: 0.4, grow: 1.1, orbit: 3.2, flat: 1.1, holdB: 0.4 }
+    const EXP_DUR = EXP.holdA + EXP.grow + EXP.orbit + EXP.flat + EXP.holdB
+    function exportState(s) {
+      if (s < EXP.holdA) return [0, 0]; s -= EXP.holdA
+      if (s < EXP.grow) return [easeInOut(s / EXP.grow), 0]; s -= EXP.grow
+      if (s < EXP.orbit) return [1, 2 * Math.PI * (s / EXP.orbit)]; s -= EXP.orbit
+      if (s < EXP.flat) return [easeInOut(1 - s / EXP.flat), 0] // az = 0 here, NOT 2π → clean tilt-down, no spin
+      return [0, 0]
+    }
+    function pickMime() {
+      const c = ['video/mp4;codecs=avc1.42E01E', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4']
+      for (const t of c) if (window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t
+      return ''
+    }
+    const canRecord = typeof HTMLCanvasElement.prototype.captureStream === 'function' && !!window.MediaRecorder && !!pickMime()
+    if (!canRecord) { recordBtn.disabled = true; recordBtn.title = 'video capture is not supported in this browser' }
+
+    function setBusy(on, label) {
+      for (const b of [savePngBtn, recordBtn, btn]) b.disabled = on
+      modelSeg.querySelectorAll('button').forEach(b => b.disabled = on)
+      seasonSeg.querySelectorAll('button').forEach(b => b.disabled = on)
+      if (label) recLabel.textContent = label
+    }
+
+    function recordLoop() {
+      if (!canRecord) return
+      ensureExport(); clearSway()
+      exporting = true; recOverlay.classList.add('on'); setBusy(true, 'recording…')
+      const mime = pickMime()
+      const stream = compositor.captureStream(60)
+      const chunks = []
+      const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8000000 })
+      rec.ondataavailable = ev => { if (ev.data && ev.data.size) chunks.push(ev.data) }
+      rec.onstop = () => {
+        const blob = new Blob(chunks, { type: mime })
+        const ext = mime.includes('mp4') ? 'mp4' : 'webm'
+        const url = URL.createObjectURL(blob)
+        download(url, `qr-${currentModel}-loop.${ext}`)
+        setTimeout(() => URL.revokeObjectURL(url), 5000)
+        recOverlay.classList.remove('on'); exporting = false; setBusy(false, 'recording…')
+        recordBtn.textContent = 'record loop'
+      }
+      rec.start()
+      const start = performance.now()
+      function step(now) {
+        const s = (now - start) / 1000
+        const [e, azv] = exportState(Math.min(s, EXP_DUR))
+        renderExportFrame(e, azv)
+        recLabel.textContent = `recording your loop… ${Math.min(100, Math.round(s / EXP_DUR * 100))}%`
+        if (s < EXP_DUR) requestAnimationFrame(step)
+        else rec.stop()
+      }
+      requestAnimationFrame(step)
+    }
+    recordBtn.addEventListener('click', recordLoop)
+
+    // small hook for embedding / testing: grab a square frame as a PNG data URL
+    window.qrBotanical = { frame: (e, azv) => { renderExportFrame(e || 0, azv || 0); return compositor.toDataURL('image/png') } }
 
     let debounce = null
     input.addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(rebuild, 250) })
