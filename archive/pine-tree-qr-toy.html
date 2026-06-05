@@ -302,6 +302,7 @@
 
     function toggle() {
       target = target === 0 ? 1 : 0
+      if (target === 0) az = Math.atan2(Math.sin(az), Math.cos(az)) // un-spin the shortest way back to top-down
       btn.textContent = target === 1 ? 'flatten to QR' : 'grow pine'
     }
     btn.addEventListener('click', toggle)
