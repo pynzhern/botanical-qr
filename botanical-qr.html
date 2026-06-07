@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Botanical QR — scannable plants</title>
+  <title>Botanical QR · scannable plants</title>
   <meta name="description" content="The top-down view is a real, scannable QR code; tilt it and a 3D plant grows from the same pixels." />
   <meta name="theme-color" content="#f5f3f3" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23344b2f'/%3E%3C/svg%3E" />
@@ -109,8 +109,9 @@
       </div>
       <div class="about" id="aboutCard" role="region" aria-label="about Botanical QR">
         <p class="lead">Scannable plants.</p>
-        <p>The top-down view is a real, scannable QR code — tilt it and a 3D plant grows from the same pixels.</p>
+        <p>The top-down view is a real, scannable QR code; tilt it and a 3D plant grows from the same pixels.</p>
         <p class="hint">drag to spin · tap the plant to flatten / grow</p>
+        <p class="hint">after Reactiive's cherry-blossom-qrcode</p>
       </div>
     </div>
     <div class="dock" role="group" aria-label="controls">
@@ -480,7 +481,7 @@
     const pos = new THREE.Vector3(), tgt = new THREE.Vector3(), dir = new THREE.Vector3(), up = new THREE.Vector3()
     const UP_FLAT = new THREE.Vector3(0, 0, -1), UP_ISO = new THREE.Vector3(0, 1, 0)
     function easeInOut(x) { return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2 }
-    function fadeOpacity(e) { const o = e <= 0.2 ? 0 : Math.min(1, (e - 0.2) / 0.55); return o * o * (3 - 2 * o) }
+    function fadeOpacity(e) { return 1 } // top-down is an honest projection of the 3D: pot/trunk/overhang always present, no fade/morph
 
     // place an ortho camera for a grow amount e (0 flat → 1 iso), azimuth and viewport aspect.
     // shared by the live loop and the export renderer so what you record matches what you see.
