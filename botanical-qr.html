@@ -672,15 +672,20 @@
       setTimeout(() => URL.revokeObjectURL(url), 5000)
     }
 
-    // capture timeline: hold flat → grow → full 360° orbit → flatten → hold. endpoints are the identical flat
-    // frame and az returns to 0 (≡ 2π), so the clip loops seamlessly with no extra un-spin on the flatten.
-    const EXP = { holdA: 0.4, grow: 1.1, orbit: 3.2, flat: 1.1, holdB: 0.4 }
-    const EXP_DUR = EXP.holdA + EXP.grow + EXP.orbit + EXP.flat + EXP.holdB
+    // capture timeline: hold flat → grow → hold grown → ease a full 360° spin → hold grown → flatten → hold flat.
+    // the spin eases in and out of rest (no abrupt start/stop) and is bracketed by short stills, so the loop
+    // breathes instead of snapping into the orbit. the longer flat holds also give the video a clear cover frame.
+    // endpoints are the identical flat frame and the spin lands back at az 0 (≡ 2π), so the clip still loops
+    // seamlessly with no extra un-spin on the flatten.
+    const EXP = { holdA: 0.5, grow: 1.1, holdGrownIn: 0.4, orbit: 3.4, holdGrownOut: 0.4, flat: 1.1, holdB: 0.5 }
+    const EXP_DUR = EXP.holdA + EXP.grow + EXP.holdGrownIn + EXP.orbit + EXP.holdGrownOut + EXP.flat + EXP.holdB
     function exportState(s) {
       if (s < EXP.holdA) return [0, 0]; s -= EXP.holdA
       if (s < EXP.grow) return [easeInOut(s / EXP.grow), 0]; s -= EXP.grow
-      if (s < EXP.orbit) return [1, 2 * Math.PI * (s / EXP.orbit)]; s -= EXP.orbit
-      if (s < EXP.flat) return [easeInOut(1 - s / EXP.flat), 0] // az = 0 here, NOT 2π → clean tilt-down, no spin
+      if (s < EXP.holdGrownIn) return [1, 0]; s -= EXP.holdGrownIn       // rest, fully grown, before the spin
+      if (s < EXP.orbit) return [1, 2 * Math.PI * easeInOut(s / EXP.orbit)]; s -= EXP.orbit  // eased spin: rest → 360° → rest
+      if (s < EXP.holdGrownOut) return [1, 0]; s -= EXP.holdGrownOut     // rest, fully grown, after the spin (az 2π ≡ 0)
+      if (s < EXP.flat) return [easeInOut(1 - s / EXP.flat), 0]          // az = 0 here, NOT 2π → clean tilt-down, no spin
       return [0, 0]
     }
     function pickMime() {
@@ -709,6 +714,9 @@
       const chunks = []
       const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8000000 })
       rec.ondataavailable = ev => { if (ev.data && ev.data.size) chunks.push(ev.data) }
+      // paint the flat QR before capture begins so the video's first/cover frame is the
+      // scannable code, not a stale or blank compositor frame
+      renderExportFrame(0, 0)
       rec.onstop = () => {
         const blob = new Blob(chunks, { type: mime })
         const ext = mime.includes('mp4') ? 'mp4' : 'webm'
