@@ -88,7 +88,14 @@
       align-items: center; justify-content: center; gap: 16px; background: var(--bg); transition: background 0.5s ease; }
     #recOverlay.on { display: flex; }
     #recOverlay canvas { width: auto; height: 84vmin; max-width: 92vmin; border-radius: 16px; box-shadow: 0 18px 60px rgba(20,20,24,0.14); }
-    #recLabel { font-size: 13px; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+    /* slim progress bar (no text / no percentages) — fills as the loop records / encodes */
+    #recBar { width: clamp(200px, 40vmin, 340px); height: 4px; border-radius: 999px;
+      background: rgba(20, 20, 24, 0.10); overflow: hidden; }
+    #recBar > i { display: block; height: 100%; width: 0%; border-radius: 999px;
+      background: var(--accent); transition: width 0.18s linear; }
+    /* indeterminate sweep while the gif encoder lib loads (before real progress starts) */
+    #recBar.indet > i { width: 38%; transition: none; animation: recIndet 1.05s ease-in-out infinite; }
+    @keyframes recIndet { 0% { margin-left: -38%; } 100% { margin-left: 100%; } }
 
     #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
       color: var(--muted); font-size: 14px; letter-spacing: 0.04em; pointer-events: none; transition: opacity 0.4s; }
@@ -119,14 +126,11 @@
       </div>
     </div>
     <div class="dock" role="group" aria-label="controls">
-      <span class="seg" id="modelSeg" role="group" aria-label="choose plant">
-        <button data-model="caladium-h" class="on" aria-pressed="true">caladium · H</button>
-        <button data-model="caladium-m" aria-pressed="false">caladium · M</button>
-        <button data-model="pine" aria-pressed="false">pine · M</button>
-      </span>
-      <span class="seg hidden" id="seasonSeg" role="group" aria-label="choose season">
-        <button data-season="forest" class="on" aria-pressed="true">forest</button>
-        <button data-season="snow" aria-pressed="false">snow</button>
+      <span class="seg" id="plantSeg" role="group" aria-label="choose plant">
+        <button data-model="caladium-h" class="on" aria-pressed="true">caladium · fine</button>
+        <button data-model="caladium-m" aria-pressed="false">caladium · coarse</button>
+        <button data-model="pine" data-season="forest" aria-pressed="false">pine · forest</button>
+        <button data-model="pine" data-season="snow" aria-pressed="false">pine · snow</button>
       </span>
       <span class="divider"></span>
       <input id="content" type="url" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="QR content URL" placeholder="https://your-link" />
@@ -142,7 +146,7 @@
     </div>
   </div>
 
-  <div id="recOverlay"><div id="recLabel">recording…</div></div>
+  <div id="recOverlay"><div id="recBar"><i></i></div></div>
 
   <script type="importmap">
   { "imports": { "three": "https://esm.sh/three@0.160.0" } }
@@ -524,8 +528,7 @@
     // ---- interaction ------------------------------------------------------
     const btn = document.getElementById('toggle')
     const input = document.getElementById('content')
-    const modelSeg = document.getElementById('modelSeg')
-    const seasonSeg = document.getElementById('seasonSeg')
+    const plantSeg = document.getElementById('plantSeg')
     const loading = document.getElementById('loading')
     input.value = DEFAULT_CONTENT
 
@@ -556,21 +559,16 @@
       document.querySelector('meta[name=theme-color]').setAttribute('content', m.bg)
     }
 
-    modelSeg.addEventListener('click', ev => {
+    // one row, four presets: caladium fine/bold (error-correction H/M) and pine forest/snow.
+    // each button carries its model and (for pine) its season; season is irrelevant to caladium.
+    plantSeg.addEventListener('click', ev => {
       const b = ev.target.closest('button'); if (!b) return
       currentModel = b.dataset.model
+      if (b.dataset.season) variant = b.dataset.season
       const m = MODELS[currentModel]
-      modelSeg.querySelectorAll('button').forEach(x => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on) })
-      seasonSeg.classList.toggle('hidden', !m.seasons)
+      plantSeg.querySelectorAll('button').forEach(x => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on) })
       applyTheme(m)
       btn.textContent = target === 1 ? 'flatten to QR' : m.grow
-      rebuild()
-    })
-
-    seasonSeg.addEventListener('click', ev => {
-      const b = ev.target.closest('button'); if (!b) return
-      variant = b.dataset.season
-      seasonSeg.querySelectorAll('button').forEach(x => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on) })
       rebuild()
     })
 
@@ -578,7 +576,9 @@
     const saveBtn = document.getElementById('saveBtn')
     const saveMenu = document.getElementById('saveMenu')
     const recOverlay = document.getElementById('recOverlay')
-    const recLabel = document.getElementById('recLabel')
+    const recBar = document.getElementById('recBar')
+    const recFill = recBar.querySelector('i')
+    function setProg(frac) { recBar.classList.remove('indet'); recFill.style.width = (Math.max(0, Math.min(1, frac)) * 100) + '%' }
     let exportRenderer = null, exportCamera = null, compositor = null, compCtx = null
     const EXPORT_SIZE = 1080
     const FOOTER_H = 168                       // signature band below the code; the QR keeps its full quiet zone above
@@ -597,7 +597,7 @@
       // so coarse level-M codes still decode, while the 3D orbit stays natural. captureStream reads it.
       compositor = document.createElement('canvas'); compositor.width = EXPORT_SIZE; compositor.height = EXPORT_SIZE + FOOTER_H
       compCtx = compositor.getContext('2d')
-      recOverlay.insertBefore(compositor, recLabel)
+      recOverlay.insertBefore(compositor, recBar)
     }
     function clearSway() { for (const m of meshes) { m.mesh.rotation.z = 0; m.mesh.rotation.x = 0 } }
     function download(href, name) { const a = document.createElement('a'); a.href = href; a.download = name; document.body.appendChild(a); a.click(); a.remove() }
@@ -705,16 +705,15 @@
 
     function setBusy(on, label) {
       saveBtn.disabled = on; btn.disabled = on
-      modelSeg.querySelectorAll('button').forEach(b => b.disabled = on)
-      seasonSeg.querySelectorAll('button').forEach(b => b.disabled = on)
+      plantSeg.querySelectorAll('button').forEach(b => b.disabled = on)
       if (on) closeMenu()
-      if (label) recLabel.textContent = label
+      // recording/encoding status is shown by the progress bar, not text
     }
 
     function recordLoop() {
       if (!canRecord) return
       ensureExport(); clearSway()
-      exporting = true; recOverlay.classList.add('on'); setBusy(true, 'recording…')
+      exporting = true; recOverlay.classList.add('on'); setBusy(true); setProg(0)
       const mime = pickMime()
       const stream = compositor.captureStream(60)
       const chunks = []
@@ -737,7 +736,7 @@
         const s = (now - start) / 1000
         const [e, azv] = exportState(Math.min(s, EXP_DUR))
         renderExportFrame(e, azv)
-        recLabel.textContent = `recording your loop… ${Math.min(100, Math.round(s / EXP_DUR * 100))}%`
+        setProg(s / EXP_DUR)
         if (s < EXP_DUR) requestAnimationFrame(step)
         else rec.stop()
       }
@@ -764,7 +763,7 @@
     }
     async function saveGif() {
       ensureExport(); clearSway()
-      exporting = true; recOverlay.classList.add('on'); setBusy(true); recLabel.textContent = 'loading gif encoder…'
+      exporting = true; recOverlay.classList.add('on'); setBusy(true); recBar.classList.add('indet')
       try { await ensureGifLib() }
       catch (e) { recOverlay.classList.remove('on'); exporting = false; setBusy(false); alert('could not load the gif encoder (offline?)'); return }
       if (!gifScratch) { gifScratch = document.createElement('canvas'); gifScratch.width = GIF_SIZE; gifScratch.height = GIF_H; gifScratchCtx = gifScratch.getContext('2d') }
@@ -778,10 +777,10 @@
         gif.addFrame(gifScratchCtx, { copy: true, delay: Math.round(1000 / GIF_FPS) })
         // yield every frame so the capture overlay repaints smoothly (matches the mp4 preview),
         // not every 4th (which looked choppy on screen even though the saved file was fine)
-        recLabel.textContent = `capturing frames… ${Math.round(i / frames * 100)}%`
+        setProg(0.5 * i / frames)
         await new Promise(r => requestAnimationFrame(r))
       }
-      gif.on('progress', p => { recLabel.textContent = `encoding gif… ${Math.round(p * 100)}%` })
+      gif.on('progress', p => setProg(0.5 + 0.5 * p))
       gif.on('finished', blob => {
         download(URL.createObjectURL(blob), exportName('-loop', 'gif'))
         recOverlay.classList.remove('on'); exporting = false; setBusy(false)
