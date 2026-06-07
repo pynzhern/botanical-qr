@@ -293,6 +293,7 @@
       // data-driven blooms: open at the lightest central spots, sit low in the rosette, connected by stalks.
       // the colourway is data-driven too (white / blush / peach / lemon).
       const pal = PALETTES[hashMatrix(matrix) % PALETTES.length]
+      if (typeof window !== 'undefined') window.__pal = pal.name   // debug: which colourway this URL drew
       const flower = []
       const spots = bloomSpots(matrix, gridSize, rng)
       for (let i = 0; i < spots.length; i++) {
