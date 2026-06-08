@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Frangipani QR — matched</title>
+  <style>
+    :root { --ink: #2c3326; --muted: #5f6a55; --accent: #6f9a55; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #f6f4ec; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+    #app { position: fixed; inset: 0; }
+    canvas { display: block; touch-action: none; }
+
+    .hud { position: fixed; inset: 0; pointer-events: none; padding: 26px;
+      display: flex; flex-direction: column; justify-content: space-between; }
+    .eyebrow { font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+    .title { font-size: 24px; font-weight: 650; color: var(--ink); letter-spacing: -0.01em; margin-top: 4px; }
+    .sub { font-size: 13px; color: var(--muted); max-width: 36ch; line-height: 1.45; margin-top: 6px; }
+
+    .bottom { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+    .controls { pointer-events: auto; display: flex; gap: 10px; align-items: center; }
+    input {
+      font: inherit; font-size: 14px; color: var(--ink); background: #fff;
+      border: 1px solid rgba(44,51,38,0.16); border-radius: 12px; padding: 10px 14px; width: 220px; outline: none;
+    }
+    input:focus { border-color: var(--accent); }
+    button {
+      font: inherit; font-size: 13px; font-weight: 600; color: var(--ink); background: rgba(255,255,255,0.7);
+      -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border: 1px solid rgba(44,51,38,0.14);
+      border-radius: 999px; padding: 10px 18px; cursor: pointer; transition: background 0.2s, transform 0.1s;
+    }
+    button:hover { background: #fff; }
+    button:active { transform: scale(0.97); }
+    .hint { font-size: 12px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div class="hud">
+    <div class="top">
+      <div class="eyebrow">frangipani qr · matched</div>
+      <div class="title">the blooms ARE the QR</div>
+      <div class="sub">a domed crown over the tile: the top of every cell carries its module — light → cream blooms (some with a yellow throat), dark → green foliage — so the canopy is the code. trunk fades when flat. drag to spin, tap to flatten.</div>
+    </div>
+    <div class="bottom">
+      <span class="hint">drag to spin · tap to flatten / grow</span>
+      <div class="controls">
+        <input id="content" type="url" spellcheck="false" autocomplete="off" autocapitalize="off" />
+        <button id="toggle">flatten to QR</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="importmap">
+  { "imports": { "three": "https://esm.sh/three@0.160.0" } }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three'
+    import QRCode from 'https://esm.sh/qrcode@1.5.3'
+
+    const CUBE = 1
+    const DEFAULT_CONTENT = 'https://pynzhern.com'
+
+    // ---- palette: scanners only read luminance, so any hue works as long as the brightness matches ----
+    // ground — monotone floor carries the QR outside the crown (dark module dark, light module light)
+    const G_DARK = new THREE.Color('#4f4632'), G_LIGHT = new THREE.Color('#e6dcc6')
+    const TRUNK = new THREE.Color('#7c6a52')   // pale grey-brown bole; fades on flatten
+    // foliage (DARK modules) — two deep greens, both low-luminance → valid dark
+    const FOLIAGE = [new THREE.Color('#2c4426'), new THREE.Color('#38562f')]
+    // blooms (LIGHT modules) — cream / warm-white / yellow throat / soft pink, all high-luminance → valid light
+    const BLOOM_CREAM = new THREE.Color('#f1ead8'), BLOOM_WARM = new THREE.Color('#f7f0e0')
+    const BLOOM_YELLOW = new THREE.Color('#efe199'), BLOOM_PINK = new THREE.Color('#f2dcd6')
+
+    function generateQRMatrix(content) {
+      const data = QRCode.create(content || DEFAULT_CONTENT, { errorCorrectionLevel: 'M' }) // chunkier modules → blooms read
+      const size = data.modules.size
+      const matrix = []
+      for (let y = 0; y < size; y++) { const row = []; for (let x = 0; x < size; x++) row.push(data.modules.get(x, y) === 1); matrix.push(row) }
+      return matrix
+    }
+    function pseudoRandom(a, b, seed) { const s = Math.sin(a * 127.1 + b * 311.7 + seed * 43.7) * 43758.5; return s - Math.floor(s) }
+
+    // a bloom / foliage colour for a cell, picked by its module (cohesion: EVERY cell coloured by its module,
+    // so the exposed top carries the real QR and the rest is matching mottle — no codey-vs-botanical seam)
+    function cellColour(col, row, light) {
+      if (light) {
+        const r = pseudoRandom(col, row, 3)
+        return r < 0.20 ? BLOOM_YELLOW : r < 0.30 ? BLOOM_PINK : r < 0.62 ? BLOOM_WARM : BLOOM_CREAM
+      }
+      return pseudoRandom(col, row, 5) < 0.45 ? FOLIAGE[1] : FOLIAGE[0]
+    }
+
+    function generateBlocks(matrix) {
+      const gridSize = matrix.length
+      const c0 = (gridSize - 1) / 2
+      const R = gridSize * 0.48                 // crown radius ⊂ inscribed circle ⊂ square → never overhangs the tile
+      const TRUNK_R = Math.max(1.6, gridSize * 0.09)
+      const TRUNK_H = Math.round(gridSize * 0.40)
+      const CROWN_MIN = Math.max(2, Math.round(gridSize * 0.12))
+      const CROWN_H = Math.round(gridSize * 0.30)
+      const BUMP = gridSize * 0.10
+      const canopyBase = TRUNK_H * CUBE
+
+      // monotone QR floor (shows the finders + ring where the crown doesn't reach)
+      const ground = []
+      for (let row = 0; row < gridSize; row++) for (let col = 0; col < gridSize; col++)
+        ground.push({ col, row, baseY: 0, dark: matrix[row][col] })
+
+      // central bole, occluded under the crown
+      const trunk = []
+      for (let row = 0; row < gridSize; row++) for (let col = 0; col < gridSize; col++) {
+        if (Math.hypot(col - c0, row - c0) >= TRUNK_R) continue
+        for (let L = 0; L < TRUNK_H; L++) trunk.push({ col, row, baseY: L * CUBE })
+      }
+
+      // domed crown over the footprint. tilt/volume is per-cell HEIGHT only — never sideways — so the
+      // top-down projection stays locked to the QR. light cells sit one voxel proud → blooms read on top.
+      const canopy = []
+      let maxY = canopyBase
+      for (let row = 0; row < gridSize; row++) for (let col = 0; col < gridSize; col++) {
+        const d = Math.hypot(col - c0, row - c0)
+        if (d >= R) continue
+        const dome = Math.sqrt(Math.max(0, 1 - (d / R) ** 2))
+        const light = !matrix[row][col]
+        let h = Math.round(CROWN_MIN + CROWN_H * dome + pseudoRandom(col, row, 7) * BUMP)
+        if (light) h += 1
+        if (h < 1) h = 1
+        for (let L = 0; L <= h; L++) {
+          const y = canopyBase + L * CUBE
+          canopy.push({ col, row, baseY: y, color: cellColour(col, row, light) })
+          if (y > maxY) maxY = y
+        }
+      }
+
+      return { ground, trunk, canopy, gridSize, totalHeight: maxY + 1 }
+    }
+
+    // ---- scene -------------------------------------------------------------
+    const app = document.getElementById('app')
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.setSize(window.innerWidth, window.innerHeight)
+    renderer.outputColorSpace = THREE.SRGBColorSpace
+    app.appendChild(renderer.domElement)
+
+    const scene = new THREE.Scene()
+    scene.background = new THREE.Color('#f6f4ec')
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 8000) // ortho: lifted voxels stay on their footprint top-down
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xa8a89a, 1.02))
+    const sun = new THREE.DirectionalLight(0xffffff, 1.18); sun.position.set(-11, 29, 11); scene.add(sun)
+
+    const cubeGeo = new THREE.BoxGeometry(CUBE, CUBE, CUBE)
+    const groundMat = new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true })
+    const trunkMat = new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true, transparent: true, opacity: 1 })
+    const canopyMat = new THREE.MeshStandardMaterial({ roughness: 0.9, flatShading: true })
+
+    let groundMesh = null, trunkMesh = null, canopyMesh = null
+    let gridSize = 0, totalHeight = 0
+    const obj = new THREE.Object3D(), tc = new THREE.Color()
+
+    function instanced(arr, mat, colourFn, offset) {
+      const m = new THREE.InstancedMesh(cubeGeo, mat, arr.length)
+      for (let i = 0; i < arr.length; i++) {
+        const b = arr[i]
+        obj.position.set(b.col - offset, b.baseY + CUBE / 2, b.row - offset)
+        obj.updateMatrix(); m.setMatrixAt(i, obj.matrix)
+        m.setColorAt(i, colourFn(b))
+      }
+      m.instanceMatrix.needsUpdate = true
+      if (m.instanceColor) m.instanceColor.needsUpdate = true
+      return m
+    }
+
+    function build(content) {
+      const data = generateBlocks(generateQRMatrix(content))
+      gridSize = data.gridSize; totalHeight = data.totalHeight
+      const offset = (gridSize - 1) / 2
+      for (const m of [groundMesh, trunkMesh, canopyMesh]) if (m) { scene.remove(m); m.dispose() }
+      groundMesh = instanced(data.ground, groundMat, b => (b.dark ? G_DARK : G_LIGHT), offset); scene.add(groundMesh)
+      trunkMesh = instanced(data.trunk, trunkMat, () => TRUNK, offset); scene.add(trunkMesh)
+      canopyMesh = instanced(data.canopy, canopyMat, b => b.color, offset); scene.add(canopyMesh) // every cell by module
+    }
+
+    // ---- camera: flat ↔ iso morph + drag orbit ----------------------------
+    let t = 0, target = 1
+    let az = 0.7, el = 0.62
+    const pos = new THREE.Vector3(), tgt = new THREE.Vector3(), dir = new THREE.Vector3(), up = new THREE.Vector3()
+    const UP_FLAT = new THREE.Vector3(0, 0, -1), UP_ISO = new THREE.Vector3(0, 1, 0)
+    function easeInOut(x) { return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2 }
+
+    function frame(now) {
+      t += (target - t) * 0.10
+      if (Math.abs(target - t) < 0.0004) t = target
+      const e = easeInOut(t)
+
+      const w = window.innerWidth, h = window.innerHeight, aspect = w / h
+      const span = gridSize
+      const flatHalf = Math.max(span * 0.5, span / (2 * aspect)) * 1.14
+      const isoHalf = Math.max(span * 0.62, totalHeight * 0.52) * 1.1
+      const halfH = flatHalf + (isoHalf - flatHalf) * e
+      camera.top = halfH; camera.bottom = -halfH; camera.left = -halfH * aspect; camera.right = halfH * aspect
+      camera.updateProjectionMatrix()
+
+      const elNow = (Math.PI / 2) * (1 - e) + el * e
+      const azNow = az * e
+      dir.set(Math.cos(elNow) * Math.sin(azNow), Math.sin(elNow), Math.cos(elNow) * Math.cos(azNow))
+      up.copy(UP_FLAT).lerp(UP_ISO, e).normalize()
+      tgt.set(0, totalHeight * 0.42 * e, 0)
+      pos.copy(dir).multiplyScalar(span * 6).add(tgt)
+      camera.position.copy(pos); camera.up.copy(up); camera.lookAt(tgt)
+
+      // trunk fades when flat (the flat centre is the crown QR, not the bole); canopy stays — it IS the QR
+      const o = e <= 0.2 ? 0 : Math.min(1, (e - 0.2) / 0.55)
+      trunkMat.opacity = o * o * (3 - 2 * o)
+      if (canopyMesh) {
+        const tm = now / 1000
+        canopyMesh.rotation.z = Math.sin(tm * 1.0) * 0.012 * e
+        canopyMesh.rotation.x = Math.cos(tm * 0.8) * 0.008 * e
+      }
+
+      renderer.render(scene, camera)
+      requestAnimationFrame(frame)
+    }
+
+    // ---- interaction -------------------------------------------------------
+    const btn = document.getElementById('toggle')
+    const input = document.getElementById('content')
+    input.value = DEFAULT_CONTENT
+
+    function toggle() {
+      target = target === 0 ? 1 : 0
+      if (target === 0) az = Math.atan2(Math.sin(az), Math.cos(az)) // un-spin the shortest way back to top-down
+      btn.textContent = target === 1 ? 'flatten to QR' : 'grow frangipani'
+    }
+    btn.addEventListener('click', toggle)
+
+    let dragging = false, lastX = 0, lastY = 0, moved = 0
+    const cv = renderer.domElement
+    cv.addEventListener('pointerdown', ev => { dragging = true; lastX = ev.clientX; lastY = ev.clientY; moved = 0; cv.setPointerCapture(ev.pointerId) })
+    cv.addEventListener('pointermove', ev => {
+      if (!dragging) return
+      const dx = ev.clientX - lastX, dy = ev.clientY - lastY
+      lastX = ev.clientX; lastY = ev.clientY; moved += Math.abs(dx) + Math.abs(dy)
+      az -= dx * 0.006
+      el = Math.max(0.2, Math.min(1.45, el + dy * 0.005))
+    })
+    cv.addEventListener('pointerup', () => { dragging = false; if (moved < 6) toggle() })
+
+    let debounce = null
+    input.addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(() => build(input.value), 250) })
+    window.addEventListener('resize', () => renderer.setSize(window.innerWidth, window.innerHeight))
+
+    build(DEFAULT_CONTENT)
+    requestAnimationFrame(frame)
+  </script>
+</body>
+</html>

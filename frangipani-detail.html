@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Frangipani QR — detail (QR version) comparison</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: #e7e9df; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; color: #243024; }
+    .wrap { display: grid; grid-template-columns: repeat(4, 1fr); height: 100%; }
+    .panel { position: relative; display: flex; flex-direction: column; min-width: 0; border-right: 1px solid rgba(36,48,36,0.12); }
+    .panel:last-child { border-right: none; }
+    .label { padding: 10px 14px; font-size: 12px; font-weight: 650; }
+    .label small { font-weight: 500; color: #586253; }
+    .frame { flex: 1; position: relative; }
+    iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
+  </style>
+</head>
+<body>
+  <div class="wrap" id="wrap"></div>
+  <script>
+    const vers = [[9, '53×53 (current)'], [13, '69×69'], [17, '85×85'], [21, '101×101 (finest)']]
+    const url = 'https://pynzhern.com'
+    const w = document.getElementById('wrap')
+    for (const [v, lbl] of vers) {
+      const p = document.createElement('div'); p.className = 'panel'
+      const l = document.createElement('div'); l.className = 'label'; l.innerHTML = 'ver ' + v + ' <small>· ' + lbl + '</small>'
+      const fr = document.createElement('div'); fr.className = 'frame'
+      const f = document.createElement('iframe'); f.src = 'frangipani-qr-v33.html?ver=' + v + '&url=' + encodeURIComponent(url)
+      fr.appendChild(f); p.appendChild(l); p.appendChild(fr); w.appendChild(p)
+    }
+  </script>
+</body>
+</html>

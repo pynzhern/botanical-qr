@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Frangipani QR — matched v11 (data-driven)</title>
+  <style>
+    :root { --ink: #243024; --muted: #586253; --accent: #5f8a4c; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #eef0e6; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+    #app { position: fixed; inset: 0; }
+    canvas { display: block; touch-action: none; }
+    .hud { position: fixed; inset: 0; pointer-events: none; padding: 26px;
+      display: flex; flex-direction: column; justify-content: space-between; }
+    .eyebrow { font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+    .title { font-size: 24px; font-weight: 650; color: var(--ink); letter-spacing: -0.01em; margin-top: 4px; }
+    .sub { font-size: 13px; color: var(--muted); max-width: 38ch; line-height: 1.45; margin-top: 6px; }
+    .bottom { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+    .controls { pointer-events: auto; display: flex; gap: 10px; align-items: center; }
+    input { font: inherit; font-size: 14px; color: var(--ink); background: #fff;
+      border: 1px solid rgba(36,48,36,0.16); border-radius: 12px; padding: 10px 14px; width: 220px; outline: none; }
+    input:focus { border-color: var(--accent); }
+    button { font: inherit; font-size: 13px; font-weight: 600; color: var(--ink); background: rgba(255,255,255,0.7);
+      -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border: 1px solid rgba(36,48,36,0.14);
+      border-radius: 999px; padding: 10px 18px; cursor: pointer; transition: background 0.2s, transform 0.1s; }
+    button:hover { background: #fff; }
+    button:active { transform: scale(0.97); }
+    .hint { font-size: 12px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div class="hud">
+    <div class="top">
+      <div class="eyebrow">frangipani qr · matched · v11 (data-driven)</div>
+      <div class="title">every link grows its own frangipani</div>
+      <div class="sub">the blooms open at the QR's lightest spots and the leaf rosette is seeded from the code — so every URL is a different plant. obovate radiating leaves (no overlap), white-and-gold blooms clustered at the centre. flat = the QR (top-down matches 3D); error correction absorbs the petals. trunk + pot fade when flat.</div>
+    </div>
+    <div class="bottom">
+      <span class="hint">drag to spin · tap to flatten / tilt · change the link →</span>
+      <div class="controls">
+        <input id="content" type="url" spellcheck="false" autocomplete="off" autocapitalize="off" />
+        <button id="toggle">flatten to QR</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="importmap">
+  { "imports": { "three": "https://esm.sh/three@0.160.0" } }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three'
+    import QRCode from 'https://esm.sh/qrcode@1.5.3'
+
+    const CUBE = 1
+    const DEFAULT_CONTENT = new URLSearchParams(location.search).get('url') || 'https://pynzhern.com'
+    const FORM = (new URLSearchParams(location.search).get('form') === 'tree') ? 'tree' : 'plant'
+    const LEN = 3.7   // long broad frangipani leaf (20–50cm in life)
+
+    const CREAM = '#e8e1d2', FLOOR_DARK = '#45433b'
+    const CREAM_C = new THREE.Color(CREAM), FLOOR_DARK_C = new THREE.Color(FLOOR_DARK)
+    // green leaves with just a reddish-brown MIDRIB line; stalks (petioles + flower peduncles) are GREEN
+    // so the flower connects via a clean green stem (no weird reddish "dangling" stalk)
+    const PETIOLE_DARK = new THREE.Color('#2c4a26'), PETIOLE_PALE = new THREE.Color('#aac290')
+    const ZD = { midrib: new THREE.Color('#43301e'), blade: new THREE.Color('#22512a'), vein: new THREE.Color('#1c4824'), margin: new THREE.Color('#1b4220') }
+    const ZL = { midrib: new THREE.Color('#d8c4a0'), blade: new THREE.Color('#bcd29f'), vein: new THREE.Color('#dbe7bd'), margin: new THREE.Color('#aac08f') }
+    const ZN = { midrib: new THREE.Color('#5a3a22'), blade: new THREE.Color('#345c2c'), vein: new THREE.Color('#dbe7bd'), margin: new THREE.Color('#1b4220') }
+    // frangipani comes in several colourways — all with LIGHT petals (so they stay over light QR modules) and a
+    // golden throat. the URL picks one, so the variety is data-driven too.
+    const C = h => new THREE.Color(h)
+    // classic frangipani white & yellow, but NUANCED: a deep-gold eye then a graduated gold→butter→cream→white
+    // sweep out the petals (real plumeria, not a flat 2-tone). all light enough to stay decode-safe over light cells.
+    const PALETTES = [
+      { name: 'white', eye: [C('#dd9a26'), C('#f0c038')], grad: [C('#f4d062'), C('#f6df93'), C('#f6ebc2'), C('#f7f2e2'), C('#fefdfa')] },
+      { name: 'ivory', eye: [C('#d9982a'), C('#eec141')], grad: [C('#f0d36e'), C('#f2e09a'), C('#f1ead0'), C('#f6f1de'), C('#fdfbf2')] },
+      { name: 'lemon', eye: [C('#cf9020'), C('#ecb52c')], grad: [C('#f0d860'), C('#eee596'), C('#ecefbe'), C('#f3f4d6'), C('#fdfceb')] }
+    ]
+    const POT_R = 8.5, POT_H = 11
+    const POT_BODY = new THREE.Color('#2b2b2d'), POT_RIM = new THREE.Color('#393939'), POT_SOIL = new THREE.Color('#221e19')
+    const TRUNK_C = new THREE.Color('#8c7c63'), TRUNK_C2 = new THREE.Color('#6f6248'), TRUNK_C3 = new THREE.Color('#8a6753')   // grey-brown bark, dark scars, reddish new growth
+    // frangipani bud: slender spike, green calyx → cream furl → coral → pink-red tip (the reds in the references)
+    const BUD_GREEN = new THREE.Color('#5c7a44'), BUD_CREAM = new THREE.Color('#f1e7cb'), BUD_CORAL = new THREE.Color('#e59a72'), BUD_RED = new THREE.Color('#c65f64')
+
+    // ?ver=N sets the QR version (grid resolution / detail). 9 = 53², higher = finer & more detailed.
+    const QR_VER = Math.max(1, Math.min(40, parseInt(new URLSearchParams(location.search).get('ver')) || 9))
+    function generateQRMatrix(content) {
+      let data
+      try { data = QRCode.create(content || DEFAULT_CONTENT, { errorCorrectionLevel: 'H', version: QR_VER }) }
+      catch (e) { data = QRCode.create(content || DEFAULT_CONTENT, { errorCorrectionLevel: 'H' }) }
+      const size = data.modules.size
+      const matrix = []
+      for (let y = 0; y < size; y++) { const row = []; for (let x = 0; x < size; x++) row.push(data.modules.get(x, y) === 1); matrix.push(row) }
+      return matrix
+    }
+    function frac(x) { return x - Math.floor(x) }
+    // a seeded RNG so the same URL always grows the same plant, but different URLs differ
+    function makeRng(seed) { let s = (seed >>> 0) || 1; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296 } }
+    function hashMatrix(matrix) { let h = 2166136261 >>> 0; for (let r = 0; r < matrix.length; r++) for (let c = 0; c < matrix.length; c++) { h ^= matrix[r][c] ? 1 : 0; h = (h * 16777619) >>> 0 } return h }
+
+    // obovate / spoon leaf: narrow base, broad upper third, blunt-rounded tip, prominent pinnate veins
+    function leafShape(u, v) {
+      if (v < 0 || v > 1) return false
+      const w = 0.72 * Math.pow(Math.sin(Math.PI * Math.pow(Math.min(1, v * 1.05), 0.6)), 0.36)   // broad obovate leaf, a touch narrower
+      return Math.abs(u) <= w
+    }
+    function leafZone(u, v, e1, e2) {
+      if (e1 || e2) return 'margin'
+      const t = Math.abs(u)
+      if (t < 0.11) return 'midrib'
+      if (frac(v * 7.5 - t * 2.4) < 0.16) return 'vein'   // strong pinnate veins
+      return 'blade'
+    }
+
+    function pushCell(onOut, offOut, col, row, H, offset, zone, gridSize) {
+      const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
+      if (onTile) onOut.push({ col, row, H, zone })
+      else offOut.push({ x: col - offset, y: H, z: row - offset, color: ZN[zone] })
+    }
+    function pushStalk(onOut, offOut, wx, wy, wz, matrix, offset, gridSize) {
+      const col = Math.round(wx + offset), row = Math.round(wz + offset)
+      const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
+      if (onTile) onOut.push({ col, row, H: wy, color: matrix[row][col] ? PETIOLE_DARK : PETIOLE_PALE, fixed: true })
+      else offOut.push({ x: col - offset, y: wy, z: row - offset, color: PETIOLE_PALE })
+    }
+
+    function buildLeaf(onOut, offOut, leaf, matrix, offset, gridSize, baseY0, ox = 0, oz = 0) {
+      const { cx, cz, az, size, baseH, rise, droop, cup } = leaf
+      const ca = Math.cos(az), sa = Math.sin(az)
+      const du = 1 / size, dv = 1 / (size * LEN)
+      const ext = Math.ceil(size * (LEN + 0.6))
+      const ccol = Math.round(cx + offset), crow = Math.round(cz + offset)
+      let lmaxY = baseH
+      // petiole runs from the growth point (ox,oz,baseY0) — the branch tip — to the leaf base
+      const sSteps = Math.ceil(Math.hypot(cx - ox, cz - oz) + Math.abs(baseH - baseY0)) + 1
+      for (let s = 0; s <= sSteps; s++) {
+        const f = s / sSteps
+        pushStalk(onOut, offOut, ox + (cx - ox) * f, baseY0 + (baseH - baseY0) * f, oz + (cz - oz) * f, matrix, offset, gridSize)
+      }
+      for (let col = ccol - ext; col <= ccol + ext; col++) {
+        for (let row = crow - ext; row <= crow + ext; row++) {
+          const dx = (col - offset) - cx, dz = (row - offset) - cz
+          const lz = dx * ca + dz * sa, lx = -dx * sa + dz * ca
+          const u = lx / size, v = lz / (size * LEN)
+          if (v < 0 || v > 1 || u < -1 || u > 1) continue
+          if (!leafShape(u, v)) continue
+          const e1 = !leafShape(u + du, v) || !leafShape(u - du, v) || !leafShape(u, v + dv) || !leafShape(u, v - dv)
+          const e2 = !leafShape(u + 2 * du, v) || !leafShape(u - 2 * du, v) || !leafShape(u, v + 2 * dv) || !leafShape(u, v - 2 * dv)
+          const zone = leafZone(u, v, e1, e2)
+          const H = baseH + v * rise - droop * v * v - cup * u * u
+          pushCell(onOut, offOut, col, row, Math.max(2, H), offset, zone, gridSize)
+          if (H > lmaxY) lmaxY = H
+        }
+      }
+      return lmaxY
+    }
+
+    // a frangipani bloom built to its DISTINCTIVE signature: 5 waxy petals OVERLAPPING in a pinwheel spiral
+    // (each petal rides over the next = the "layers"), with a radial SUNNY-YELLOW centre → WHITE edge gradient,
+    // joined at a base calyx that the stalk connects to (not the petals).
+    function buildFlower(out, leafOut, matrix, offset, gridSize, fcx, fcz, baseH, R, sc, twist, baseY0, pal, ox = 0, oz = 0) {
+      const P = 5, sector = (Math.PI * 2) / P
+      const ccol = Math.round(fcx + offset), crow = Math.round(fcz + offset), mf = Math.ceil(R)
+      let top = baseH
+      for (let dcol = -mf; dcol <= mf; dcol++) for (let drow = -mf; drow <= mf; drow++) {
+        const col = ccol + dcol, row = crow + drow
+        if (col < 0 || row < 0 || col >= gridSize || row >= gridSize) continue
+        const rad = Math.hypot(dcol, drow) / R
+        if (rad > 1) continue
+        let color, H
+        if (rad < 0.16) {                                          // deep sunny-gold eye, raised so it reads from above
+          H = baseH + Math.round(2.5 * sc); color = rad < 0.08 ? pal.eye[0] : pal.eye[1]
+        } else {
+          const a = Math.atan2(drow, dcol) + twist + 0.95 * rad    // strong spiral → pinwheel
+          const pc = (((a % sector) + sector) % sector) / sector    // 0..1 across one petal
+          const petalW = Math.pow(Math.sin(Math.PI * pc), 0.45)
+          const reach = 0.55 + 0.45 * petalW                        // broad, rounded, overlapping petals
+          if (rad > reach) continue
+          // OVERLAP / LAYERS: each petal ramps up toward its leading edge so it rides over its neighbour;
+          // the step at the sector seam is the visible overlap. petals also tilt gently up.
+          const layer = pc * 2.1 * sc, tilt = rad * 0.8 * sc   // stronger spiral relief → the "swirl" reads
+          H = baseH + Math.round(1 + layer + tilt)
+          // the signature, nuanced radial sweep: gold near the eye → butter → cream → white at the tips
+          const gi = Math.min(pal.grad.length - 1, Math.floor(((rad - 0.16) / 0.84) * pal.grad.length))
+          color = pal.grad[gi]
+        }
+        out.push({ x: col - offset, z: row - offset, y: H, color })
+        if (H > top) top = H
+      }
+      // green calyx at the flower's BASE + a stalk from that base down to the branch centre
+      // (the flower hangs off the bottom, like the real peduncle — never off the petals)
+      pushStalk(leafOut, [], fcx, baseH, fcz, matrix, offset, gridSize)
+      const steps = Math.ceil(Math.hypot(fcx - ox, fcz - oz) + Math.abs(baseH - baseY0)) + 1
+      for (let s = 0; s <= steps; s++) {
+        const f = s / steps   // f=0 flower base → f=1 the branch tip (ox,oz,baseY0)
+        pushStalk(leafOut, [], fcx + (ox - fcx) * f, baseH + (baseY0 - baseH) * f, fcz + (oz - fcz) * f, matrix, offset, gridSize)
+      }
+      return top
+    }
+
+    function buildPot(out, potR, potH) {
+      for (let ly = 0; ly < potH; ly++) {
+        const rOut = potR * (0.72 + 0.28 * ly / (potH - 1)), rIn = rOut - 1.6
+        const rim = ly === potH - 1, m = Math.ceil(potR)
+        for (let x = -m; x <= m; x++) for (let z = -m; z <= m; z++) {
+          const d = Math.hypot(x, z)
+          if (d <= rOut && d >= rIn) out.push({ x, y: ly, z, color: rim ? POT_RIM : POT_BODY })
+        }
+      }
+      const mf = Math.ceil(potR), soilTop = potH - 2
+      for (let ly = soilTop; ly >= Math.max(0, soilTop - 2); ly--) {
+        const rFill = potR * (0.72 + 0.28 * ly / (potH - 1)) - 1.1
+        for (let x = -mf; x <= mf; x++) for (let z = -mf; z <= mf; z++)
+          if (Math.hypot(x, z) <= rFill) out.push({ x, y: ly, z, color: POT_SOIL })
+      }
+    }
+    function barkColor(x, z, y) {   // grey-brown with dark leaf-scars and reddish new-growth flecks
+      const r = frac(Math.sin((x * 3.1 + y * 1.7) * 12.9898 + z * 5 * 78.233) * 43758.5)
+      return r < 0.16 ? TRUNK_C3 : r < 0.40 ? TRUNK_C2 : TRUNK_C
+    }
+    function buildTrunk(out, trunkR, potH, trunkTop) {
+      const m = Math.ceil(trunkR)
+      for (let ly = potH - 1; ly <= trunkTop; ly++) {
+        const r = trunkR * (1 - 0.16 * (ly - potH) / Math.max(1, trunkTop - potH))
+        for (let x = -m; x <= m; x++) for (let z = -m; z <= m; z++)
+          if (Math.hypot(x, z) <= r) out.push({ x, y: ly, z, color: barkColor(x, z, ly) })
+      }
+    }
+    // a tapering branch from the fork (x0,y0,z0) out to a tip (x1,y1,z1)
+    function buildBranch(out, x0, y0, z0, x1, y1, z1, r0) {
+      const steps = Math.ceil(Math.hypot(x1 - x0, z1 - z0) + Math.abs(y1 - y0)) + 1
+      for (let s = 0; s <= steps; s++) {
+        const f = s / steps
+        const bx = x0 + (x1 - x0) * f, by = y0 + (y1 - y0) * f, bz = z0 + (z1 - z0) * f
+        const r = Math.max(1.0, r0 * (1 - 0.5 * f)), m = Math.ceil(r)
+        const cx = Math.round(bx), cz = Math.round(bz), cy = Math.round(by)
+        for (let dx = -m; dx <= m; dx++) for (let dz = -m; dz <= m; dz++)
+          if (Math.hypot(dx, dz) <= r) out.push({ x: cx + dx, y: cy, z: cz + dz, color: barkColor(cx + dx, cz + dz, cy) })
+      }
+    }
+    // a slender frangipani BUD: a short upright spike, green calyx → cream → coral → pink-red tip.
+    // (vertical → ~1-cell footprint from above, so it barely touches the QR even with red at the tip)
+    function buildBud(out, bx, bz, baseH, sc, seed) {
+      const H = Math.max(2, Math.round((1.6 + seed * 1.4) * sc))   // SHORT, slender — nestles with the blooms, not a post
+      const lean = (seed - 0.5) * 0.8                               // mostly upright (slight tilt) — points up, doesn't dangle
+      for (let h = 0; h <= H; h++) {
+        const t = H ? h / H : 0
+        const x = bx + lean * t, z = bz + lean * 0.6 * t
+        const color = t < 0.45 ? BUD_CREAM : t < 0.78 ? BUD_CORAL : BUD_RED   // furled cream petal → coral → pink-red tip
+        out.push({ x, y: baseH + h, z, color })
+      }
+      return baseH + H
+    }
+
+    // where do the blooms open? the lightest dense spots near a point — a white petal over a light
+    // module is already correct, so this is both data-driven (per-URL) and cheap on error correction.
+    function bloomSpotsNear(matrix, gridSize, rng, ccol, crow, Rc, K, sep) {
+      const samp = Math.max(2, Math.round(gridSize * 0.05))
+      const cand = []
+      for (let dc = -Rc; dc <= Rc; dc++) for (let dr = -Rc; dr <= Rc; dr++) {
+        if (Math.hypot(dc, dr) > Rc) continue
+        const col = ccol + dc, row = crow + dr
+        if (col < 0 || row < 0 || col >= gridSize || row >= gridSize) continue
+        let lit = 0, n = 0
+        for (let a = -samp; a <= samp; a++) for (let b = -samp; b <= samp; b++) {
+          if (Math.hypot(a, b) > samp) continue
+          const c2 = col + a, r2 = row + b
+          if (c2 < 0 || r2 < 0 || c2 >= gridSize || r2 >= gridSize) continue
+          if (!matrix[r2][c2]) lit++; n++
+        }
+        cand.push({ col, row, d: n ? lit / n : 0, j: rng() * 0.03 })
+      }
+      cand.sort((p, q) => (q.d + q.j) - (p.d + p.j))
+      const picks = []
+      for (const c of cand) {
+        if (picks.length >= K) break
+        if (picks.every(p => Math.hypot(p.col - c.col, p.row - c.row) > sep)) picks.push(c)
+      }
+      return picks
+    }
+
+    function generatePlant(matrix) {
+      const gridSize = matrix.length
+      const offset = (gridSize - 1) / 2
+      const sc = gridSize / 33
+      const rng = makeRng(hashMatrix(matrix))
+
+      const ground = []
+      let dark = 0, total = 0
+      for (let row = 0; row < gridSize; row++) for (let col = 0; col < gridSize; col++) {
+        const isDark = matrix[row][col]; total++; if (isDark) dark++
+        ground.push({ x: col - offset, y: 0, z: row - offset, color: isDark ? FLOOR_DARK_C : CREAM_C })
+      }
+
+      const potR = POT_R * sc, potH = Math.max(4, Math.round(POT_H * sc))
+      const trunkR = Math.max(1.3, 2.0 * sc)   // slimmer bole → fewer brown pixels top-down
+      const forkY = potH + Math.round(gridSize * 0.2)   // bole, then it forks
+      const pot = []; buildPot(pot, potR, potH)
+      const trunk = []; buildTrunk(trunk, trunkR, potH, forkY)
+
+      // FORK into exactly 2 branches that climb UP to tips on roughly OPPOSITE sides at slightly different
+      // heights — a clean, layered fork that stays inside the tile. (capped at 2: 3 crowds the square → mess)
+      const NB = 2
+      const a0b = rng() * Math.PI * 2
+      const tipD = gridSize * 0.12
+      const tips = []
+      for (let b = 0; b < NB; b++) {
+        const ang = a0b + (b / NB) * Math.PI * 2 + (rng() - 0.5) * 0.22   // ~opposite, small jitter → never collide
+        const len = 0.85 + rng() * 0.25
+        const tx = Math.cos(ang) * tipD * len, tz = Math.sin(ang) * tipD * len
+        const ty = forkY + Math.round(gridSize * (0.08 + rng() * 0.1))    // modest height variation → tidy, layered
+        tips.push({ x: tx, z: tz, y: ty })
+        buildBranch(trunk, 0, forkY, 0, tx, ty, tz, trunkR * 0.62)   // (x0,y0,z0)->(x1,y1,z1): thin branch up to the tip
+      }
+
+      const leaves = [], overhang = [], flower = []
+      const MAX_TILT = 1.4
+      const S = gridSize * 0.5 - 0.3
+      const pal = PALETTES[hashMatrix(matrix) % PALETTES.length]
+      if (typeof window !== 'undefined') window.__pal = pal.name
+      let maxY = 0, maxR = 0
+
+      for (const tip of tips) {
+        // leaf rosette emerging from this tip — fewer & smaller per tip; fit accounts for the tip offset
+        const Nl = 6 + Math.floor(rng() * 2)   // fuller rosette → fills more of the tile, covers the brown centre
+        const a0 = rng() * Math.PI * 2
+        for (let k = 0; k < Nl; k++) {
+          const az = a0 + (k / Nl) * Math.PI * 2 + (rng() - 0.5) * 0.18
+          const rc = (2.2 + rng() * 1.4) * sc
+          const size = (14 + rng() * 5) * sc
+          const cA = Math.abs(Math.cos(az)), sA = Math.abs(Math.sin(az))
+          const reach0 = rc + size * LEN, lat = size * 0.72
+          // STRICT no-overhang: whole leaf (incl. its lateral width, from the tip offset) stays inside the square.
+          // NO minimum floor — a leaf shrinks as much as needed so it never spills past the edge.
+          const fLimX = (0.88 * S - Math.abs(tip.x)) / (reach0 * cA + lat * sA)
+          const fLimZ = (0.88 * S - Math.abs(tip.z)) / (reach0 * sA + lat * cA)
+          const f = Math.min(1.0, fLimX, fLimZ)
+          if (f < 0.12) continue   // would be a speck — skip rather than draw a stub
+          const rcf = rc * f, sizef = size * f
+          const baseH = tip.y + Math.max((rng() * 3 - 1) * sc, rcf / MAX_TILT)
+          const leaf = {
+            cx: tip.x + Math.cos(az) * rcf, cz: tip.z + Math.sin(az) * rcf, az, size: sizef, baseH,
+            rise: (4 + rng() * 2) * sc, droop: (1.5 + rng() * 2) * sc, cup: (1.5 + rng() * 1.5) * sc   // flatter canopy so the bloom (above) clears it
+          }
+          const ly = buildLeaf(leaves, overhang, leaf, matrix, offset, gridSize, tip.y, tip.x, tip.z)
+          if (ly > maxY) maxY = ly
+          const rr = Math.hypot(tip.x, tip.z) + rcf + sizef * LEN; if (rr > maxR) maxR = rr
+        }
+        // a DENSE bouquet at this tip — several blooms at VARIED heights so they layer into a posy (not a flat
+        // blob), raised above the leaf rosette, each on a peduncle to the tip. light spots → decode-safe.
+        const tcol = Math.round(tip.x + offset), trow = Math.round(tip.z + offset)
+        const spots = bloomSpotsNear(matrix, gridSize, rng, tcol, trow, Math.round(gridSize * 0.06), 3 + Math.floor(rng() * 2), gridSize * 0.035)
+        for (let i = 0; i < spots.length; i++) {
+          const fcx = spots[i].col - offset, fcz = spots[i].row - offset
+          const R = gridSize * (i === 0 ? 0.09 : 0.072) * (0.9 + rng() * 0.2)   // smaller so the cluster reads as many flowers
+          const fTop = buildFlower(flower, leaves, matrix, offset, gridSize, fcx, fcz, tip.y + Math.round((4 + rng() * 1.5) * sc), R, sc, rng() * Math.PI * 2, tip.y, pal, tip.x, tip.z)   // nestled AMID the top leaves, not floating
+          if (fTop > maxY) maxY = fTop
+        }
+        // several small buds among the blooms (pointed, pink-red tips) — fills out the bouquet
+        const nb = 2 + Math.floor(rng() * 3)
+        for (let j = 0; j < nb; j++) {
+          const bang = rng() * Math.PI * 2, br = (0.4 + rng() * 1.6) * sc
+          const bTop = buildBud(flower, tip.x + Math.cos(bang) * br, tip.z + Math.sin(bang) * br, tip.y + Math.round((4 + rng() * 2) * sc), sc, rng())
+          if (bTop > maxY) maxY = bTop
+        }
+      }
+      if (potR > maxR) maxR = potR
+
+      for (const v of leaves) {
+        v.x = v.col - offset; v.z = v.row - offset; v.y = v.H
+        v.c = v.fixed ? v.color : (matrix[v.row][v.col] ? ZD[v.zone] : ZL[v.zone])
+      }
+      for (const v of overhang) v.c = v.color
+
+      return { ground, pot, trunk, leaves, overhang, flower, gridSize, maxY, maxR }
+    }
+
+    // ---- scene -------------------------------------------------------------
+    const app = document.getElementById('app')
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.setSize(window.innerWidth, window.innerHeight)
+    renderer.outputColorSpace = THREE.SRGBColorSpace
+    app.appendChild(renderer.domElement)
+
+    const scene = new THREE.Scene()
+    scene.background = new THREE.Color('#eef0e6')
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 8000)
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xa6a89a, 1.05))
+    const sun = new THREE.DirectionalLight(0xffffff, 1.16); sun.position.set(-10, 28, 12); scene.add(sun)
+
+    const cubeGeo = new THREE.BoxGeometry(CUBE, CUBE, CUBE)
+    const groundMat = new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true })
+    const leafMat = new THREE.MeshStandardMaterial({ roughness: 0.78, flatShading: true })
+    const overhangMat = new THREE.MeshStandardMaterial({ roughness: 0.78, flatShading: true, transparent: true, opacity: 1 })
+    const woodMat = new THREE.MeshStandardMaterial({ roughness: 0.92, flatShading: true, transparent: true, opacity: 1 })
+    const flowerMat = new THREE.MeshStandardMaterial({ roughness: 0.6, flatShading: true })
+
+    let groundMesh = null, leafMesh = null, overhangMesh = null, potMesh = null, trunkMesh = null, flowerMesh = null
+    let gridSize = 0, plantMaxY = 0, plantMaxR = 0
+    const obj = new THREE.Object3D()
+
+    function mkMesh(arr, mat, offset) {
+      const m = new THREE.InstancedMesh(cubeGeo, mat, arr.length)
+      for (let i = 0; i < arr.length; i++) {
+        const b = arr[i]
+        const x = b.x !== undefined ? b.x : b.col - offset
+        const z = b.z !== undefined ? b.z : b.row - offset
+        const y = (b.y !== undefined ? b.y : b.H)
+        obj.position.set(x, y + CUBE / 2, z)
+        obj.updateMatrix(); m.setMatrixAt(i, obj.matrix)
+        m.setColorAt(i, b.c || b.color)
+      }
+      m.instanceMatrix.needsUpdate = true
+      if (m.instanceColor) m.instanceColor.needsUpdate = true
+      return m
+    }
+
+    function build(content) {
+      const data = generatePlant(generateQRMatrix(content))
+      gridSize = data.gridSize; plantMaxY = data.maxY; plantMaxR = data.maxR
+      const offset = (gridSize - 1) / 2
+      for (const m of [groundMesh, leafMesh, overhangMesh, potMesh, trunkMesh, flowerMesh]) if (m) { scene.remove(m); m.dispose() }
+      groundMesh = mkMesh(data.ground, groundMat, offset); scene.add(groundMesh)
+      potMesh = mkMesh(data.pot, woodMat, offset); scene.add(potMesh)
+      trunkMesh = mkMesh(data.trunk, woodMat, offset); scene.add(trunkMesh)
+      leafMesh = mkMesh(data.leaves, leafMat, offset); scene.add(leafMesh)
+      overhangMesh = mkMesh(data.overhang, overhangMat, offset); scene.add(overhangMesh)
+      flowerMesh = mkMesh(data.flower, flowerMat, offset); scene.add(flowerMesh)
+    }
+
+    // ---- camera ------------------------------------------------------------
+    let t = 0, target = 1
+    let az = 0.7, el = 0.58
+    const pos = new THREE.Vector3(), tgt = new THREE.Vector3(), dir = new THREE.Vector3(), up = new THREE.Vector3()
+    const UP_FLAT = new THREE.Vector3(0, 0, -1), UP_ISO = new THREE.Vector3(0, 1, 0)
+    function easeInOut(x) { return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2 }
+
+    function frame(now) {
+      t += (target - t) * 0.10
+      if (Math.abs(target - t) < 0.0004) t = target
+      const e = easeInOut(t)
+      const w = window.innerWidth, h = window.innerHeight, aspect = w / h
+      const span = gridSize
+      const flatHalf = Math.max(span * 0.5, span / (2 * aspect)) * 1.14
+      const isoHalf = Math.max(span * 0.6, plantMaxR * 0.82, plantMaxY * 0.55) * 1.1
+      const halfH = flatHalf + (isoHalf - flatHalf) * e
+      camera.top = halfH; camera.bottom = -halfH; camera.left = -halfH * aspect; camera.right = halfH * aspect
+      camera.updateProjectionMatrix()
+
+      const elNow = (Math.PI / 2) * (1 - e) + el * e
+      const azNow = az * e
+      dir.set(Math.cos(elNow) * Math.sin(azNow), Math.sin(elNow), Math.cos(elNow) * Math.cos(azNow))
+      up.copy(UP_FLAT).lerp(UP_ISO, e).normalize()
+      tgt.set(0, plantMaxY * 0.42 * e, 0)
+      pos.copy(dir).multiplyScalar(span * 6).add(tgt)
+      camera.position.copy(pos); camera.up.copy(up); camera.lookAt(tgt)
+
+      const o = e <= 0.2 ? 0 : Math.min(1, (e - 0.2) / 0.55)
+      woodMat.opacity = o * o * (3 - 2 * o); overhangMat.opacity = o * o * (3 - 2 * o)   // wood (pot/trunk/branches) fades when flat → top-down is leaves+flowers+QR, no brown wasted pixels
+      if (leafMesh) {
+        const tm = now / 1000
+        const sz = Math.sin(tm * 0.9) * 0.012 * e, sx = Math.cos(tm * 0.7) * 0.008 * e
+        leafMesh.rotation.z = sz; leafMesh.rotation.x = sx
+        if (overhangMesh) { overhangMesh.rotation.z = sz; overhangMesh.rotation.x = sx }
+        if (flowerMesh) { flowerMesh.rotation.z = sz; flowerMesh.rotation.x = sx }
+      }
+      renderer.render(scene, camera)
+      requestAnimationFrame(frame)
+    }
+
+    // ---- interaction -------------------------------------------------------
+    const btn = document.getElementById('toggle')
+    const input = document.getElementById('content')
+    input.value = DEFAULT_CONTENT
+    function toggle() {
+      target = target === 0 ? 1 : 0
+      if (target === 0) az = Math.atan2(Math.sin(az), Math.cos(az))
+      btn.textContent = target === 1 ? 'flatten to QR' : 'grow frangipani'
+    }
+    btn.addEventListener('click', toggle)
+
+    let dragging = false, lastX = 0, lastY = 0, moved = 0
+    const cv = renderer.domElement
+    cv.addEventListener('pointerdown', ev => { dragging = true; lastX = ev.clientX; lastY = ev.clientY; moved = 0; cv.setPointerCapture(ev.pointerId) })
+    cv.addEventListener('pointermove', ev => {
+      if (!dragging) return
+      const dx = ev.clientX - lastX, dy = ev.clientY - lastY
+      lastX = ev.clientX; lastY = ev.clientY; moved += Math.abs(dx) + Math.abs(dy)
+      az -= dx * 0.006
+      el = Math.max(0.2, Math.min(1.45, el + dy * 0.005))
+    })
+    cv.addEventListener('pointerup', () => { dragging = false; if (moved < 6) toggle() })
+
+    let debounce = null
+    input.addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(() => build(input.value), 250) })
+    window.addEventListener('resize', () => renderer.setSize(window.innerWidth, window.innerHeight))
+
+    build(DEFAULT_CONTENT)
+    requestAnimationFrame(frame)
+  </script>
+</body>
+</html>
