@@ -77,10 +77,12 @@
     .seg button:disabled { opacity: 0.5; cursor: default; }
     .seg.hidden { display: none; }
 
-    /* 16px is the floor that stops iOS Safari auto-zooming (and failing to zoom back) on focus */
-    input { font: inherit; font-size: 16px; color: var(--ink); background: transparent; border: none;
+    input { font: inherit; font-size: 13.5px; color: var(--ink); background: transparent; border: none;
       border-radius: 10px; padding: 8px 12px; width: 188px; outline: none;
       -webkit-appearance: none; appearance: none; }
+    /* iOS Safari auto-zooms inputs under 16px on focus (and won't zoom back); raise to 16px on
+       touch devices only — desktop keeps the 13.5px that matches the rest of the dock */
+    @media (pointer: coarse) { input { font-size: 16px; } }
     input::placeholder { color: var(--muted); }
 
     .btn { font: inherit; font-size: 13px; font-weight: 600; color: var(--ink); background: rgba(20,20,24,0.05);
@@ -157,9 +159,9 @@
       <span class="seg" id="plantSeg" role="group" aria-label="choose plant">
         <button data-model="caladium-h" class="on" aria-pressed="true">caladium</button>
         <button data-model="frangipani" aria-pressed="false">frangipani</button>
+        <button data-model="pitcher" aria-pressed="false">pitcher</button>
         <button data-model="pine" data-season="forest" aria-pressed="false">pine · forest</button>
         <button data-model="pine" data-season="snow" aria-pressed="false">pine · snow</button>
-        <button data-model="pitcher" aria-pressed="false">pitcher</button>
       </span>
       <span class="divider"></span>
       <input id="content" type="url" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="QR content URL" placeholder="https://your-link" />
@@ -798,16 +800,18 @@
       const C = h => new THREE.Color(h)
       const CREAM_C = C('#f1ece2'), FLOOR_DARK_C = C('#566159')
       const POT_BODY = C('#c0744d'), POT_RIM = C('#d98f63'), POT_SOIL = C('#4f3b2a')
-      const LD = { mid: C('#2d5530'), blade: C('#386a37'), vein: C('#33602f'), margin: C('#2b5430') }
-      const LL = { mid: C('#bdd4a8'), blade: C('#d0e1bd'), vein: C('#e0ead0'), margin: C('#b7ce9f') }
-      const LOD = { mid: C('#335c2c'), blade: C('#3f6b34'), vein: C('#3a6630'), margin: C('#335c2f') }
-      const LOL = { mid: C('#a9c595'), blade: C('#b9cfa2'), vein: C('#c7d8b2'), margin: C('#a3c08f') }
-      const LN  = { mid: C('#3d6b3a'), blade: C('#4e8048'), vein: C('#cfe0bd'), margin: C('#2b5430') }
+      // GREENER variant: hue shifted toward a richer glossy green (less cream/sage), luminance held so decode margin survives
+      const LD = { mid: C('#234c26'), blade: C('#2e6831'), vein: C('#295c2b'), margin: C('#224a25') }
+      const LL = { mid: C('#aece90'), blade: C('#b9dba0'), vein: C('#cfe6b6'), margin: C('#a8ca87') }
+      const LOD = { mid: C('#29512a'), blade: C('#356235'), vein: C('#305b30'), margin: C('#294f29') }
+      const LOL = { mid: C('#9fc285'), blade: C('#aece90'), vein: C('#c2dcab'), margin: C('#98bb7e') }
+      const LN  = { mid: C('#356a37'), blade: C('#467d40'), vein: C('#cfe6b6'), margin: C('#224a25') }
       const STK_D = C('#3f5a2c'), STK_L = C('#86a064')
       const PB_L = C('#e7ddbe'), PB_D = C('#6e2a30'), PB_OL = C('#d6c2a0'), PB_OD = C('#7c3038')
       const PERI_L = C('#edd2bc'), PERI_D = C('#7e2330')
-      const LID_L = C('#b9c79a'), LID_D = C('#5a2330')
+      const LID_L = C('#d8c4a0'), LID_D = C('#5a2330')   // cream + dark red → reads as PITCHER, not a green leaf
       const WING_L = C('#dacca6'), WING_D = C('#6d3a2c'), WING_OL = C('#c9b893'), WING_OD = C('#6f4233')
+      const THROAT_C = C('#39141a')   // dark recessed mouth interior — reads as an open trap, not a capped top
       const PIT_DEAD = new Set([15, 19, 23])
 
       const frac = x => x - Math.floor(x)
@@ -853,30 +857,69 @@
         const mf = Math.ceil(potR), soilTop = potH - 2
         for (let ly = soilTop; ly >= Math.max(0, soilTop - 2); ly--) { const rFill = potR * (0.7 + 0.3 * ly / (potH - 1)) - 1.1; for (let x = -mf; x <= mf; x++) for (let z = -mf; z <= mf; z++) if (Math.hypot(x, z) <= rFill) out.push({ x, y: ly, z, color: POT_SOIL }) }
       }
-      function bodyR(pr, f) { return pr * (0.4 + 0.6 * Math.pow(f, 0.8)) }
+      // Nepenthes rafflesiana LOWER pitcher: bulbous belly widest in the lower third (f≈0.32),
+      // tapering to a constricted-but-open mouth. base rounds in, mouth stays ~0.6·pr.
+      // taller, slimmer rafflesiana profile (~2:1 tall:wide) — gently bulbous low, tapering to the capped mouth
+      function bodyR(pr, f) { return pr * (0.34 + 0.42 * Math.sin(Math.PI * Math.pow(f, 0.58)) + 0.20 * f) }
       function leafClear(leafMap, col, row, y) { const a = leafMap.get(col + ',' + row); if (!a) return true; for (const lh of a) if (Math.abs(lh - y) < 2.6) return false; return true }
-      // levitating mouth-up funnel hung at baseY; de-intersection carves any cell that would pass through a leaf
+      // levitating mouth-up pitcher hung at baseY: bulbous cup → rolled peristome rim (tilted, low front /
+      // raised rear neck) → an oval LID roofing the mouth from the back → two fringed front wings.
+      // de-intersection carves any cell that would pass through a leaf.
       function buildPitcher(matchedOut, solidOut, leafMap, px, pz, baseY, ph, pr, faceAz, matrix, offset, gridSize) {
         const cells = [], ca = Math.cos(faceAz), sa = Math.sin(faceAz)
-        const put = (col, row, y, kind) => { if (leafClear(leafMap, col, row, y)) cells.push({ col, row, y, kind }) }
+        // pitcher is SOLID — it does NOT yield to leaves. instead the LEAVES are carved around it afterwards (see the
+        // leaf-carve post-pass), so the trap always reads as a solid object and no leaf ever slices through it.
+        const put = (col, row, y, kind) => { cells.push({ col, row, y, kind }) }
+        // per-angle mouth height: front of the rim sits LOW, rear rises into the neck → mouth faces up-and-forward
+        const rimAt = (dx, dz, rr) => { const front = rr > 0.6 ? (dx * ca + dz * sa) / rr : 0; return ph - 1 - Math.round((front + 1) * 1.5) }
         for (let ly = 0; ly < ph; ly++) {
           const f = ly / Math.max(1, ph - 1), rr = bodyR(pr, f), m = Math.ceil(rr) + 1
+          // round the base in: a hemispherical floor on the lowest layers so the belly doesn't read as a flat disc
+          const shell = ly < 2 ? rr : 1.8
           for (let dx = -m; dx <= m; dx++) for (let dz = -m; dz <= m; dz++) {
-            const d = Math.hypot(dx, dz); if (d > rr || d < rr - 1.8) continue
-            const front = rr > 0.6 ? (dx * ca + dz * sa) / rr : 0
-            const rimTop = ph - 1 - Math.round((front + 1) * 1.6)
+            const d = Math.hypot(dx, dz); if (d > rr || d < rr - shell) continue
+            const rimTop = rimAt(dx, dz, rr)
             if (ly > rimTop) continue
             put(Math.round(px + offset + dx), Math.round(pz + offset + dz), baseY + ly, ly >= rimTop - 1 ? 'peri' : 'body')
           }
         }
-        const backR = bodyR(pr, 1)
-        for (let i = 0; i < 3; i++) put(Math.round(px + offset - ca * (backR - 0.5)), Math.round(pz + offset - sa * (backR - 0.5)), baseY + ph - 1 + i, 'peri')
-        for (let i = 0; i < 3; i++) for (let j = -1; j <= 1; j++) put(Math.round(px + offset - ca * (backR + 0.3 + i * 0.7) - sa * j), Math.round(pz + offset - sa * (backR + 0.3 + i * 0.7) + ca * j), baseY + ph + 1 + i, 'lid')
+        const mouthR = bodyR(pr, 1)
+        const segs = Math.max(16, Math.round(mouthR * 6))
+        // THROAT — a recessed dark WELL several layers deep inside the rim → a clearly visible open mouth (not a capped top).
+        // only the top layer (rimTop-1) is visible from straight above, so deepening the well downward is decode-free.
+        { const mm = Math.ceil(mouthR)
+          for (let dx = -mm; dx <= mm; dx++) for (let dz = -mm; dz <= mm; dz++) {
+            if (Math.hypot(dx, dz) > mouthR - 0.5) continue
+            const rimTop = rimAt(dx, dz, mouthR)
+            for (let kk = 1; kk <= 4; kk++) put(Math.round(px + offset + dx), Math.round(pz + offset + dz), baseY + rimTop - kk, 'throat')
+          } }
+        // rolled peristome lip — a flared glossy ring just outside the cup at the mouth line
+        for (let i = 0; i < segs; i++) {
+          const a = (i / segs) * Math.PI * 2, dx = Math.cos(a) * (mouthR + 0.5), dz = Math.sin(a) * (mouthR + 0.5)
+          const rimTop = rimAt(dx, dz, mouthR)
+          put(Math.round(px + offset + dx), Math.round(pz + offset + dz), baseY + rimTop, 'peri')
+          put(Math.round(px + offset + dx), Math.round(pz + offset + dz), baseY + rimTop + 1, 'peri')
+        }
+        // taller rear NECK so the lid hinges well ABOVE the rim (clear air beneath it)
+        const neckH = 2 + Math.round(pr * 0.5)
+        for (let i = 0; i <= neckH; i++) for (let j = -1; j <= 1; j++)
+          put(Math.round(px + offset - ca * (mouthR - 0.2) - sa * j), Math.round(pz + offset - sa * (mouthR - 0.2) + ca * j), baseY + ph - 1 + i, 'peri')
+        // LID (operculum) — a distinct angled roof held HIGH above the open mouth (jaunty open-lid pose, gap beneath)
+        const hdx = -ca * (mouthR - 0.4), hdz = -sa * (mouthR - 0.4), hy = baseY + ph - 1 + neckH + 1
+        const lidLen = mouthR * 2.0, lidW = mouthR * 1.15
+        for (let a = 0; a <= lidLen; a += 0.5) for (let b = -lidW; b <= lidW; b += 0.5) {
+          const fa = a / lidLen, fb = b / Math.max(0.5, lidW)
+          if (fa * fa * 0.5 + fb * fb > 1) continue                  // teardrop oval, broad at the hinge
+          const dx = hdx + ca * a - sa * b, dz = hdz + sa * a + ca * b
+          const y = hy + 0.4 * a                                     // steep back-tilt → a clearly raised roof, mouth open below
+          put(Math.round(px + offset + dx), Math.round(pz + offset + dz), Math.round(y), 'lid')
+        }
+        // two fringed front WINGS running down the belly (flanking the front, distinct frills)
         for (let ly = 1; ly < ph - 1; ly++) {
-          const rad = bodyR(pr, ly / (ph - 1)) + 0.4, comb = ly % 2 === 0
+          const rad = bodyR(pr, ly / (ph - 1)) + 0.3, comb = ly % 2 === 0
           for (const side of [-1, 1]) {
-            put(Math.round(px + offset + ca * rad - sa * side * 0.9), Math.round(pz + offset + sa * rad + ca * side * 0.9), baseY + ly, 'wing')
-            if (comb) put(Math.round(px + offset + ca * (rad + 0.9) - sa * side * 0.9), Math.round(pz + offset + sa * (rad + 0.9) + ca * side * 0.9), baseY + ly, 'wing')
+            put(Math.round(px + offset + ca * rad - sa * side * 1.5), Math.round(pz + offset + sa * rad + ca * side * 1.5), baseY + ly, 'wing')
+            if (comb) put(Math.round(px + offset + ca * (rad + 0.8) - sa * side * 1.5), Math.round(pz + offset + sa * (rad + 0.8) + ca * side * 1.5), baseY + ly, 'wing')
           }
         }
         const top = new Map()
@@ -885,25 +928,31 @@
           const onTile = c.col >= 0 && c.row >= 0 && c.col < gridSize && c.row < gridSize
           const dark = onTile ? matrix[c.row][c.col] : false
           if (top.get(c.col + ',' + c.row) === c && onTile) {
-            const pr2 = c.kind === 'peri' ? [PERI_L, PERI_D] : c.kind === 'lid' ? [LID_L, LID_D] : c.kind === 'wing' ? [WING_L, WING_D] : [PB_L, PB_D]
+            const pr2 = c.kind === 'throat' ? [THROAT_C, THROAT_C] : c.kind === 'peri' ? [PERI_L, PERI_D] : c.kind === 'lid' ? [LID_L, LID_D] : c.kind === 'wing' ? [WING_L, WING_D] : [PB_L, PB_D]
             matchedOut.push({ x: c.col - offset, y: c.y, z: c.row - offset, color: dark ? pr2[1] : pr2[0] })
           } else {
-            const op = c.kind === 'peri' ? [PERI_L, PERI_D] : c.kind === 'lid' ? [LID_L, LID_D] : c.kind === 'wing' ? [WING_OL, WING_OD] : [PB_OL, PB_OD]
+            const op = c.kind === 'throat' ? [THROAT_C, THROAT_C] : c.kind === 'peri' ? [PERI_L, PERI_D] : c.kind === 'lid' ? [LID_L, LID_D] : c.kind === 'wing' ? [WING_OL, WING_OD] : [PB_OL, PB_OD]
             solidOut.push({ x: c.col - offset, y: c.y, z: c.row - offset, color: onTile ? (dark ? op[1] : op[0]) : PB_OD })
           }
         }
       }
-      // thin green tendril from a leaf tip down to the pitcher mouth-back (with a gentle curl)
+      // green tendril hanging the pitcher off a leaf tip (gentle curl). the TOP third is never culled so the
+      // stalk visibly emerges from under the leaf tip = the pitcher reads as attached, not levitating.
       function buildTendril(matchedOut, solidOut, leafMap, ax, az0, ay, bx, bz, by, matrix, offset, gridSize) {
-        const n = Math.max(3, Math.ceil(Math.hypot(bx - ax, by - ay, bz - az0)))
+        const n = Math.max(4, Math.ceil(Math.hypot(bx - ax, by - ay, bz - az0)) * 2)
+        const seen = new Set()
         for (let i = 0; i <= n; i++) {
-          const t = i / n, curl = Math.sin(t * Math.PI) * 1.4
+          const t = i / n, curl = Math.sin(t * Math.PI) * 1.2
           const x = ax + (bx - ax) * t - curl, y = ay + (by - ay) * t, z = az0 + (bz - az0) * t + curl
-          const col = Math.round(x + offset), row = Math.round(z + offset)
-          if (!leafClear(leafMap, col, row, y)) continue
-          const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
-          if (onTile) solidOut.push({ x: col - offset, y, z: row - offset, color: matrix[row][col] ? STK_D : STK_L })
-          else solidOut.push({ x: col - offset, y, z: row - offset, color: STK_L })
+          const col = Math.round(x + offset), row = Math.round(z + offset), yr = Math.round(y)
+          if (t > 0.32 && !leafClear(leafMap, col, row, y)) continue   // keep the attachment run; cull only lower stretches that pierce a leaf
+          // 2-cell-thick stalk (the cell + a neighbour toward the tip-curl side) so the connector reads at this scale
+          for (const [oc, orr] of [[0, 0], [t < 0.5 ? 1 : 0, t < 0.5 ? 0 : 1]]) {
+            const cc = col + oc, rr2 = row + orr, key = cc + ',' + rr2 + ',' + yr
+            if (seen.has(key)) continue; seen.add(key)
+            const onTile = cc >= 0 && rr2 >= 0 && cc < gridSize && rr2 < gridSize
+            solidOut.push({ x: cc - offset, y: yr, z: rr2 - offset, color: onTile ? (matrix[rr2][cc] ? STK_D : STK_L) : STK_L })
+          }
         }
       }
       function build(content) {
@@ -916,7 +965,7 @@
         for (let r = 0; r < gridSize; r++) for (let c = 0; c < gridSize; c++) { hsh ^= matrix[r][c] ? 1 : 0; hsh = (hsh * 16777619) >>> 0 }
         let rs = hsh || 1; const rnd = () => { rs = (rs * 1664525 + 1013904223) >>> 0; return rs / 4294967296 }
         const S = gridSize * 0.5 - 0.3
-        const potR = 7.5 * sc, potH = Math.max(4, Math.round(9 * sc))
+        const potR = 7.0 * sc, potH = Math.max(4, Math.round(10 * sc))   // adequately sized — a touch under frangipani's 7.5/11
         const potCells = []; buildPot(potCells, potR, potH)
         // rosette of strappy green leaves: few, distinct (golden angle), out + gently up, fit the square
         const leaves = [], overhang = [], tips = []
@@ -937,30 +986,58 @@
           tips.push(buildLeaf(leaves, overhang, { cx: Math.cos(d.az) * rc, cz: Math.sin(d.az) * rc, az: d.az, size, baseH: Math.max(d.climbH, potH + rc / MAX_TILT), rise: d.rise, droop: d.droop }, matrix, offset, gridSize))
         }
         const leafCells = [], leafMap = new Map()
+        const mapLeaf = (col, row, H) => { const k = col + ',' + row; (leafMap.get(k) || leafMap.set(k, []).get(k)).push(H) }
         for (const v of leaves) {
           const onTile = v.col >= 0 && v.row >= 0 && v.col < gridSize && v.row < gridSize
           let color
           if (v.fixed) color = v.color
           else color = matrix[v.row][v.col] ? LD[v.zone] : LL[v.zone]
           leafCells.push({ x: v.col - offset, y: v.H, z: v.row - offset, color })
-          if (onTile) { const k = v.col + ',' + v.row; (leafMap.get(k) || leafMap.set(k, []).get(k)).push(v.H) }
+          mapLeaf(v.col, v.row, v.H)
         }
-        // 1-2 levitating pitchers of different sizes, hung from the longest leaf tips
+        // register the OFF-TILE overhang leaves too, so pitcher flaps de-intersect against the whole canopy (not just on-tile)
+        for (const v of overhang) mapLeaf(Math.round(v.x + offset), Math.round(v.z + offset), v.y)
         const matched = [], solid = []
-        // hang pitchers in OPEN AIR below the outer/high leaf tips; skip any tip without room to float
-        const cand = tips.map((tp, i) => ({ tp, laz: defs[i].az })).filter(o => Math.hypot(o.tp.tx, o.tp.tz) > S * 0.42).sort((a, b) => b.tp.tipH - a.tp.tipH)
-        let placed = 0; const want = 1 + Math.floor(rnd() * 2)
-        for (let k = 0; k < cand.length && placed < want; k++) {
-          const { tp, laz } = cand[k]
-          const pr = (2.6 + rnd() * 1.9) * sc            // DIFFERENT sizes per pitcher
-          const ph = Math.round((8 + rnd() * 4) * sc)
-          if (tp.tipH < potH + ph + 7 * sc) continue     // not enough room to hang cleanly above the soil
-          const baseY = tp.tipH - ph - 3 * sc            // floats 3 cells below the tip, well above the soil
-          const px = tp.tx + Math.cos(laz) * 0.8 * sc, pz = tp.tz + Math.sin(laz) * 0.8 * sc
+        const floorY = potH + 2 * sc                     // never sink into the soil
+        // every leaf tip is a candidate, tallest first. the leaf-carve post-pass keeps pitchers solid through any leaf,
+        // so a pitcher only needs to hang below its tip, inside the tile, above the soil — no canopy gymnastics.
+        const allCand = tips.map((tp, i) => ({ tp, laz: defs[i].az, used: false })).sort((a, b) => b.tp.tipH - a.tp.tipH)
+        let placed = 0; const want = 3 + Math.floor(rnd() * 2)   // target 3-4
+        // hang one pitcher off candidate c if a cup of at least minPh fits; returns true on success.
+        const place = (c, minPh) => {
+          if (c.used) return false
+          const { tp, laz } = c
+          const pr0 = (2.8 + rnd() * 1.5) * sc
+          const foot = pr0 + 2.6 * sc                    // lateral half-footprint (body + lid + wings)
+          const rUse = Math.min(Math.hypot(tp.tx, tp.tz), S - foot)   // pull inward only enough to avoid overhang
+          const px = Math.cos(laz) * rUse, pz = Math.sin(laz) * rUse
+          const topExtra = 2.5 * sc + 0.93 * pr0         // neck + raised-lid rise above the cup top
+          const topCap = tp.tipH - 5 * sc                // hang below the parent tip
+          const phMax = topCap - floorY - topExtra
+          if (phMax < minPh) return false
+          const ph = Math.min(Math.round((13 + rnd() * 4) * sc), Math.floor(phMax))
+          const pr = Math.min(pr0, 0.30 * ph)            // OBLONG (~2:1): clamp width to (possibly capped) height
+          const baseY = Math.max(floorY, topCap - ph - topExtra)
           buildPitcher(matched, solid, leafMap, px, pz, baseY, ph, pr, laz, matrix, offset, gridSize)
           buildTendril(matched, solid, leafMap, tp.tx, tp.tz, tp.tipH, px - Math.cos(laz) * bodyR(pr, 1), pz - Math.sin(laz) * bodyR(pr, 1), baseY + ph, matrix, offset, gridSize)
-          placed++
+          c.used = true; placed++; return true
         }
+        // pass 1 — up to `want` nicely-sized pitchers off the outer tips
+        for (const c of allCand) { if (placed >= want) break; if (Math.hypot(c.tp.tx, c.tp.tz) > S * 0.34) place(c, 7 * sc) }
+        // GUARANTEE at least 2 — relax the height (then position) until two are hung
+        for (const c of allCand) { if (placed >= 2) break; if (Math.hypot(c.tp.tx, c.tp.tz) > S * 0.30) place(c, 4 * sc) }
+        for (const c of allCand) { if (placed >= 2) break; place(c, 2 * sc) }
+        // LEAF-CARVE post-pass — the leaves de-intersect against the pitchers: any leaf cell sitting inside a pitcher's
+        // vertical column (within its occupied y-range) is removed, so the solid pitcher reads in FRONT of the foliage
+        // and no leaf slices through it. carve a 1-cell margin so the leaf stops just shy of the pitcher surface.
+        const pitCol = new Map()   // "col,row" -> [minY, maxY] occupied by any pitcher cell
+        for (const c of matched.concat(solid)) {
+          const k = Math.round(c.x + offset) + ',' + Math.round(c.z + offset), r = pitCol.get(k)
+          if (!r) pitCol.set(k, [c.y, c.y]); else { if (c.y < r[0]) r[0] = c.y; if (c.y > r[1]) r[1] = c.y }
+        }
+        const insidePitcher = (col, row, y) => { const r = pitCol.get(col + ',' + row); return r && y >= r[0] - 1 && y <= r[1] + 1 }
+        const leafKept = leafCells.filter(c => !insidePitcher(Math.round(c.x + offset), Math.round(c.z + offset), c.y))
+        const overhangKept = overhang.filter(c => !insidePitcher(Math.round(c.x + offset), Math.round(c.z + offset), c.y))
         let maxR = 0, maxY = 0
         for (const v of leaves) { const r = Math.hypot(v.col - offset, v.row - offset); if (r > maxR) maxR = r; if (v.H > maxY) maxY = v.H }
         for (const c of matched.concat(solid)) { const r = Math.hypot(c.x, c.z); if (r > maxR) maxR = r; if (c.y > maxY) maxY = c.y }
@@ -969,10 +1046,10 @@
           groups: [
             { cells: groundCells, fade: false, sway: false },
             { cells: potCells, fade: false, sway: false },
-            { cells: solid, fade: false, sway: false },
-            { cells: matched, fade: false, sway: false },
-            { cells: leafCells, fade: false, sway: true },
-            { cells: overhang, fade: true, sway: true }
+            { cells: solid, fade: false, sway: true },    // pitchers + tendrils sway WITH the plant (same pot-centre pivot → attachment holds)
+            { cells: matched, fade: false, sway: true },
+            { cells: leafKept, fade: false, sway: true },
+            { cells: overhangKept, fade: true, sway: true }
           ],
           view: { span: gridSize, maxR, maxY, spanK: 0.6, radK: 0.84, heightK: 0.66, focusK: 0.46 }
         }
