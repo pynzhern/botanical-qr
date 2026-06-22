@@ -1,0 +1,71 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>pitcher decode sweep</title></head>
+<body style="font-family:monospace;background:#111;color:#0f0;padding:16px;white-space:pre-wrap">
+<div id="out">running…</div>
+<div id="frames"></div>
+<script type="module">
+// sweep the PITCHER in the combined botanical-qr.html across content lengths.
+// reads the canvas directly (preserveDrawingBuffer) → jsQR, like _decode-sweep100.html,
+// but selects the pitcher model + injects content via the iframe DOM (app takes no query params).
+import jsQR from 'https://esm.sh/jsqr@1.4.0'
+const file = 'botanical-qr.html'
+
+// curated realistic contents (varied scheme/length) + length-graded synthetic ones to ~1000 chars
+const curated = [
+  'https://pynzhern.com', 'https://pynzhern.com/', 'hello@pynzhern.com',
+  'https://github.com/pynzhern/botanical-qr', 'https://www.linkedin.com/in/pynzhern',
+  'WIFI:S:MyNet;T:WPA;P:pass1234;;', 'tel:+6591234567',
+  'https://pynzhern.com/projects/botanical-qr?ref=cjhendry'
+]
+const graded = []
+for (const L of [40, 60, 90, 120, 160, 200, 250, 300, 355, 420, 500, 650, 800, 1000]) {
+  const base = 'https://pynzhern.com/p/'
+  graded.push(base + 'x'.repeat(Math.max(1, L - base.length)))
+}
+const urls = [...curated, ...graded]
+
+const wrap = document.getElementById('frames'), out = document.getElementById('out')
+const sleep = ms => new Promise(r => setTimeout(r, ms))
+function mkFrame() {
+  return new Promise(res => {
+    const f = document.createElement('iframe')
+    f.width = 460; f.height = 460; f.style.border = '0'
+    f.src = file
+    f.onload = () => res(f)
+    wrap.appendChild(f)
+  })
+}
+const results = []
+for (let i = 0; i < urls.length; i++) {
+  const u = urls[i]
+  const f = await mkFrame()
+  await sleep(900)
+  let decoded = 'FAIL'
+  try {
+    const doc = f.contentDocument
+    doc.querySelector('button[data-model="pitcher"]').click()      // select pitcher
+    const inp = doc.getElementById('content')
+    inp.value = u; inp.dispatchEvent(new Event('input', { bubbles: true }))  // set content → debounced rebuild
+    await sleep(1100)
+    doc.getElementById('toggle').click()                            // flatten to QR
+    await sleep(1100)
+    const cv = doc.querySelector('canvas')
+    const g = document.createElement('canvas'); g.width = cv.width; g.height = cv.height
+    g.getContext('2d').drawImage(cv, 0, 0)
+    const img = g.getContext('2d').getImageData(0, 0, g.width, g.height)
+    const r = jsQR(img.data, img.width, img.height)
+    decoded = r ? r.data : 'FAIL'
+  } catch (e) { decoded = 'ERR:' + e.message }
+  results.push({ len: u.length, u, ok: decoded === u, decoded })
+  f.remove()
+  const fails = results.filter(x => !x.ok)
+  out.textContent = `pitcher sweep (${results.length}/${urls.length}, ${results.filter(x=>x.ok).length} pass)\n`
+    + (fails.length ? 'FAILS:\n' + fails.map(x => `  len=${x.len} ${x.u.slice(0,42)}… -> ${String(x.decoded).slice(0,42)}`).join('\n') : 'clean so far')
+  window.__progress = results.length
+}
+window.__results = results; window.__done = true
+const fails = results.filter(x => !x.ok)
+out.textContent = `DONE pitcher: ${results.filter(x=>x.ok).length}/${results.length} pass\n`
+  + (fails.length ? 'FAILS:\n' + fails.map(x => `  len=${x.len} ${x.u.slice(0,46)} -> ${String(x.decoded).slice(0,46)}`).join('\n') : 'ALL PASS ✅')
+</script>
+</body></html>
