@@ -30,7 +30,7 @@
     for (const u of urls) {
       const cell = document.createElement('div'); cell.className = 'cell'
       const tag = document.createElement('div'); tag.className = 'tag'; tag.textContent = u.replace(/^https?:\/\//, '').slice(0, 22)
-      const f = document.createElement('iframe'); f.src = 'frangipani-qr-v33.html?ver=13&url=' + encodeURIComponent(u)
+      const f = document.createElement('iframe'); f.src = 'frangipani-qr-v37.html?ver=13&url=' + encodeURIComponent(u)
       cell.appendChild(tag); cell.appendChild(f); g.appendChild(cell)
     }
   </script>

@@ -7,7 +7,7 @@
   <style>
     * { box-sizing: border-box; }
     html, body { margin: 0; height: 100%; background: #e7e9df; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; color: #243024; }
-    .wrap { display: grid; grid-template-columns: repeat(4, 1fr); height: 100%; }
+    .wrap { display: grid; grid-template-columns: repeat(2, 1fr); height: 100%; }
     .panel { position: relative; display: flex; flex-direction: column; min-width: 0; border-right: 1px solid rgba(36,48,36,0.12); }
     .panel:last-child { border-right: none; }
     .label { padding: 10px 14px; font-size: 12px; font-weight: 650; }
@@ -19,14 +19,18 @@
 <body>
   <div class="wrap" id="wrap"></div>
   <script>
-    const vers = [[9, '53×53 (current)'], [13, '69×69'], [17, '85×85'], [21, '101×101 (finest)']]
+    // v38 ("cute" — compact fork, 5-6 blooms) vs v39 (branches spread apart + staggered heights, fills more of the square)
+    const variants = [
+      ['frangipani-qr-v38.html', 17, 'v38 · "cute" · compact fork'],
+      ['frangipani-qr-v39.html', 17, 'v39 · spread + staggered branches']
+    ]
     const url = 'https://pynzhern.com'
     const w = document.getElementById('wrap')
-    for (const [v, lbl] of vers) {
+    for (const [file, v, lbl] of variants) {
       const p = document.createElement('div'); p.className = 'panel'
-      const l = document.createElement('div'); l.className = 'label'; l.innerHTML = 'ver ' + v + ' <small>· ' + lbl + '</small>'
+      const l = document.createElement('div'); l.className = 'label'; l.innerHTML = lbl
       const fr = document.createElement('div'); fr.className = 'frame'
-      const f = document.createElement('iframe'); f.src = 'frangipani-qr-v33.html?ver=' + v + '&url=' + encodeURIComponent(url)
+      const f = document.createElement('iframe'); f.src = file + '?ver=' + v + '&url=' + encodeURIComponent(url)
       fr.appendChild(f); p.appendChild(l); p.appendChild(fr); w.appendChild(p)
     }
   </script>
