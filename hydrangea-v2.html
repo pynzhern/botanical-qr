@@ -1,0 +1,1960 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Botanical QR · scannable plants</title>
+  <meta name="description" content="The top-down view is a real, scannable QR code; tilt it and a 3D plant grows from the same pixels." />
+  <meta name="theme-color" content="#f5f3f3" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23344b2f'/%3E%3C/svg%3E" />
+  <style>
+    :root {
+      --ink: #2a2a2e; --muted: #6b6b72; --accent: #c24d77; --bg: #f7f1f3;
+      --panel: rgba(255,255,255,0.72); --panel-line: rgba(20,20,24,0.12);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); transition: background 0.5s ease; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; color: var(--ink); }
+    #app { position: fixed; inset: 0; }
+    canvas { display: block; touch-action: none; }
+
+    .hud { position: fixed; inset: 0; pointer-events: none;
+      padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(22px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+      display: flex; flex-direction: column; justify-content: space-between; }
+
+    /* brand mark + about popover */
+    .top { display: flex; flex-direction: column; align-items: flex-start; }
+    .brand { pointer-events: auto; display: inline-flex; align-items: center; gap: 9px; }
+    /* stacked pyn/zhern signature — sits in the empty left margin, clear of the plant and the wordmark */
+    .page-mark { position: fixed; left: 26px; top: 50%; transform: translateY(-50%);
+      width: 58px; height: auto; opacity: 0.82; pointer-events: none; user-select: none; z-index: 2; }
+    @media (max-width: 720px) { .page-mark { display: none; } }
+    .mark { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 650; letter-spacing: -0.01em; color: var(--ink); }
+    .mark .dot { width: 9px; height: 9px; border-radius: 3px; background: var(--accent); transition: background 0.45s ease; }
+    .pill { font: inherit; font-size: 12px; font-weight: 600; color: var(--muted); background: var(--panel);
+      -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border: 1px solid var(--panel-line);
+      border-radius: 999px; padding: 5px 12px; cursor: pointer; transition: color 0.18s, background 0.18s; }
+    .pill:hover { color: var(--ink); background: #fff; }
+    .about { pointer-events: auto; margin-top: 12px; max-width: 330px;
+      background: var(--panel); -webkit-backdrop-filter: blur(22px); backdrop-filter: blur(22px);
+      border: 1px solid var(--panel-line); border-radius: 16px; padding: 16px 18px; box-shadow: 0 18px 50px rgba(20,20,24,0.13);
+      opacity: 0; transform: translateY(-6px); visibility: hidden; transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s; }
+    .about.open { opacity: 1; transform: none; visibility: visible; }
+    .about .lead { font-size: 15px; font-weight: 650; color: var(--ink); margin: 0 0 7px; }
+    .about p { font-size: 13px; line-height: 1.5; color: var(--muted); margin: 0 0 9px; }
+    .about .hint { font-size: 12px; color: var(--muted); opacity: 0.85; margin: 0; }
+
+    /* control dock — one glass panel */
+    .dock { pointer-events: auto; align-self: center; display: flex; flex-wrap: wrap; align-items: center; gap: 7px;
+      background: var(--panel); -webkit-backdrop-filter: blur(22px); backdrop-filter: blur(22px);
+      border: 1px solid var(--panel-line); border-radius: 18px; padding: 7px; box-shadow: 0 12px 40px rgba(20,20,24,0.12); }
+    .divider { width: 1px; align-self: stretch; margin: 3px 2px; background: var(--panel-line); }
+
+    .seg { display: inline-flex; background: rgba(20,20,24,0.05); border-radius: 12px; padding: 3px; }
+    .seg button { border: none; background: transparent; color: var(--ink); font: inherit; font-size: 13px; font-weight: 600;
+      padding: 7px 13px; border-radius: 9px; cursor: pointer; transition: background 0.18s, color 0.18s; white-space: nowrap; }
+    .seg button.on { background: var(--accent); color: #fff; }
+    .seg button:disabled { opacity: 0.5; cursor: default; }
+    .seg.hidden { display: none; }
+
+    input { font: inherit; font-size: 13.5px; color: var(--ink); background: transparent; border: none;
+      border-radius: 10px; padding: 8px 12px; width: 188px; outline: none; }
+    input::placeholder { color: var(--muted); }
+
+    .btn { font: inherit; font-size: 13px; font-weight: 600; color: var(--ink); background: rgba(20,20,24,0.05);
+      border: none; border-radius: 11px; padding: 8px 14px; cursor: pointer; transition: background 0.18s, transform 0.1s; white-space: nowrap; }
+    .btn:hover { background: rgba(20,20,24,0.09); }
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.45; cursor: default; transform: none; }
+
+    /* save menu */
+    .menu-wrap { position: relative; }
+    .menu { position: absolute; bottom: calc(100% + 8px); right: 0; min-width: 172px;
+      background: var(--panel); -webkit-backdrop-filter: blur(22px); backdrop-filter: blur(22px);
+      border: 1px solid var(--panel-line); border-radius: 14px; padding: 6px; box-shadow: 0 18px 50px rgba(20,20,24,0.16);
+      display: flex; flex-direction: column; gap: 2px;
+      opacity: 0; transform: translateY(6px); visibility: hidden; transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s; }
+    .menu.open { opacity: 1; transform: none; visibility: visible; }
+    .menu button { text-align: left; background: transparent; border: none; border-radius: 9px; padding: 9px 12px;
+      font: inherit; font-size: 13px; font-weight: 600; color: var(--ink); cursor: pointer;
+      display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+    .menu button:hover { background: rgba(20,20,24,0.06); }
+    .menu button:disabled { opacity: 0.4; cursor: default; }
+    .menu .meta { font-size: 11px; font-weight: 500; color: var(--muted); }
+
+    /* recording overlay: covers the frozen live view and shows the square loop being captured
+       (the export canvas must be on-screen for Safari to capture its stream) */
+    #recOverlay { position: fixed; inset: 0; z-index: 40; display: none; flex-direction: column;
+      align-items: center; justify-content: center; gap: 16px; background: var(--bg); transition: background 0.5s ease; }
+    #recOverlay.on { display: flex; }
+    #recOverlay canvas { width: auto; height: 84vmin; max-width: 92vmin; border-radius: 16px; box-shadow: 0 18px 60px rgba(20,20,24,0.14); }
+    /* slim progress bar (no text / no percentages) — fills as the loop records / encodes */
+    #recBar { width: clamp(200px, 40vmin, 340px); height: 4px; border-radius: 999px;
+      background: rgba(20, 20, 24, 0.10); overflow: hidden; }
+    #recBar > i { display: block; height: 100%; width: 0%; border-radius: 999px;
+      background: var(--accent); transition: width 0.18s linear; }
+    /* indeterminate sweep while the gif encoder lib loads (before real progress starts) */
+    #recBar.indet > i { width: 38%; transition: none; animation: recIndet 1.05s ease-in-out infinite; }
+    @keyframes recIndet { 0% { margin-left: -38%; } 100% { margin-left: 100%; } }
+
+    #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      color: var(--muted); font-size: 14px; letter-spacing: 0.04em; pointer-events: none; transition: opacity 0.4s; }
+    #loading.gone { opacity: 0; }
+
+    @media (max-width: 680px) {
+      .hud { padding: max(14px, env(safe-area-inset-top)) 14px max(16px, env(safe-area-inset-bottom)) 14px; }
+      .dock { align-self: stretch; border-radius: 16px; }
+      input { flex: 1 1 120px; width: auto; min-width: 0; }
+      .about { max-width: none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="loading">growing…</div>
+  <div class="hud">
+    <img id="pageMark" class="page-mark" alt="" aria-hidden="true" />
+    <div class="top">
+      <div class="brand">
+        <span class="mark"><span class="dot"></span>Botanical QR</span>
+        <button class="pill" id="aboutBtn" aria-expanded="false" aria-controls="aboutCard">about</button>
+      </div>
+      <div class="about" id="aboutCard" role="region" aria-label="about Botanical QR">
+        <p class="lead">Scannable plants.</p>
+        <p>The top-down view is a real, scannable QR code; tilt it and a 3D plant grows from the same pixels.</p>
+        <p class="hint">drag to spin · tap the plant to flatten / grow</p>
+        <p class="hint">after Reactiive's cherry-blossom-qrcode</p>
+      </div>
+    </div>
+    <div class="dock" role="group" aria-label="controls">
+      <span class="seg" id="plantSeg" role="group" aria-label="choose plant">
+        <button data-model="caladium-h" aria-pressed="false">caladium</button>
+        <button data-model="frangipani" aria-pressed="false">frangipani</button>
+        <button data-model="pine" data-season="forest" aria-pressed="false">pine · forest</button>
+        <button data-model="pine" data-season="snow" aria-pressed="false">pine · snow</button>
+        <button data-model="pitcher" aria-pressed="false">pitcher</button>
+        <button data-model="hydrangea" class="on" aria-pressed="true">hydrangea</button>
+      </span>
+      <span class="divider"></span>
+      <input id="content" type="url" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="QR content URL" placeholder="https://your-link" />
+      <button class="btn" id="toggle">flatten to QR</button>
+      <div class="menu-wrap">
+        <button class="btn" id="saveBtn" aria-haspopup="true" aria-expanded="false">save ▾</button>
+        <div class="menu" id="saveMenu" role="menu" aria-label="save as">
+          <button data-act="png" role="menuitem">save QR <span class="meta">PNG</span></button>
+          <button data-act="mp4" role="menuitem">save loop <span class="meta">video</span></button>
+          <button data-act="gif" role="menuitem">save loop <span class="meta">GIF</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="recOverlay"><div id="recBar"><i></i></div></div>
+
+  <script type="importmap">
+  { "imports": { "three": "https://esm.sh/three@0.160.0" } }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three'
+    import QRCode from 'https://esm.sh/qrcode@1.5.3'
+    import jsQR from 'https://esm.sh/jsqr@1.4.0'
+
+    const CUBE = 1
+    const DEFAULT_CONTENT = 'https://pynzhern.com'
+
+    // ======================================================================
+    // shared QR helper — only LUMINANCE is read by scanners, so any hue works
+    // as a module as long as dark stays dark and light stays light.
+    // ======================================================================
+    function toMatrix(data) {
+      const size = data.modules.size, matrix = []
+      for (let y = 0; y < size; y++) { const row = []; for (let x = 0; x < size; x++) row.push(data.modules.get(x, y) === 1); matrix.push(row) }
+      return matrix
+    }
+    function qrMatrix(content, opts) {
+      let data
+      try { data = QRCode.create(content || DEFAULT_CONTENT, opts) }
+      catch (e) { data = QRCode.create(content || DEFAULT_CONTENT, { errorCorrectionLevel: opts.errorCorrectionLevel }) }
+      return toMatrix(data)
+    }
+    // DEAD-ZONE SKIP: certain QR versions don't decode when a plant sits over the code centre — at some versions the
+    // soft palette goes marginal at that module size (contrast dead-zones, e.g. v15/16/19), at others the canopy occludes
+    // structure the error-correction can't recover (structural, e.g. v23). All are at 360+ char URLs. This picks the
+    // smallest version ≥ minVer that FITS the content and is NOT a dead-zone — bypassing qrMatrix's auto-version fallback
+    // (which silently lands on the bad version). Realistic URLs sit well below the first dead-zone, so they're untouched.
+    function qrMatrixSafe(content, ec, minVer, deadSet) {
+      const c = content || DEFAULT_CONTENT
+      for (let v = minVer; v <= 40; v++) {
+        if (deadSet.has(v)) continue
+        try { return toMatrix(QRCode.create(c, { errorCorrectionLevel: ec, version: v })) } catch (e) { /* content overflows v → try the next */ }
+      }
+      return qrMatrix(c, { errorCorrectionLevel: ec }) // unreachable for any realistic length
+    }
+
+    // ======================================================================
+    // CALADIUM — climbing golden-angle spiral of heart leaves. Every leaf cell
+    // is coloured by the module beneath it: exposed tops carry the real QR, the
+    // rest is a matching "mock" mottle so the whole plant reads as one variegated
+    // thing. Leaves are scaled (never clipped) to fan out to the square edge.
+    // ======================================================================
+    const CAL = (() => {
+      const CREAM = '#f3e7ea'
+      const FLOOR_DARK = '#566159'
+      const CREAM_C = new THREE.Color(CREAM)
+      const FLOOR_DARK_C = new THREE.Color(FLOOR_DARK)
+      const STALK_DARK = new THREE.Color('#587a3f')
+      const GREEN_PALE = new THREE.Color('#d2e2cd')
+      // unified variegation: midrib → blade → vein → green band → margin, on every leaf.
+      // tuned for DECODE CONTRAST: every dark-module tone sits ≲90 luminance, every light-module tone ≳180, so the
+      // binariser separates them cleanly even across the dense central rosette (deeper magenta veining reads as a
+      // more vibrant caladium, not a decode liability).
+      const ZD = { midrib: new THREE.Color('#7a2547'), blade: new THREE.Color('#94375a'), vein: new THREE.Color('#8a3f59'), gband: new THREE.Color('#45692f'), margin: new THREE.Color('#3a6630') } // dark module
+      const ZL = { midrib: new THREE.Color('#e29cc0'), blade: new THREE.Color('#ecb6d0'), vein: new THREE.Color('#f3ddea'), gband: new THREE.Color('#c2dab2'), margin: new THREE.Color('#b3cda6') } // light module
+      const ZN = { midrib: new THREE.Color('#9c3d63'), blade: new THREE.Color('#c9608a'), vein: new THREE.Color('#f3e6ec'), gband: new THREE.Color('#5f8f48'), margin: new THREE.Color('#3f6e34') } // occluded
+      const POT_R = 8.5, POT_H = 11
+      const POT_BODY = new THREE.Color('#c0744d')
+      const POT_RIM = new THREE.Color('#d98f63')
+      const POT_SOIL = new THREE.Color('#4f3b2a')
+      const CAL_DEAD = new Set([15, 19, 23]) // QR versions that don't decode under the rosette (all at 360+ char URLs)
+
+      function pseudoRandom(a, b, seed) { const s = Math.sin(a * 127.1 + b * 311.7 + seed * 43.7) * 43758.5; return s - Math.floor(s) }
+      function frac(x) { return x - Math.floor(x) }
+      function heart(u, v) { const x = u * 1.2, y = 1.2 - v * 2.4; const a = x * x + y * y - 1; return a * a * a - x * x * y * y * y <= 0 }
+      function leafZone(u, v, e1, e2) {
+        if (e1 || e2) return 'margin'
+        const t = Math.abs(u)
+        if (t < 0.07) return 'midrib'
+        if (t > 0.8) return 'gband'  // pink blade reaches most of the leaf; slim green rim (was 0.68)
+        if (frac(t * 4 - v * 1.6) < 0.09) return 'vein'
+        return 'blade'
+      }
+      function pushCell(onOut, offOut, col, row, H, offset, zone, gridSize) {
+        const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
+        if (onTile) onOut.push({ col, row, H, zone })
+        else offOut.push({ x: col - offset, y: H, z: row - offset, color: ZN[zone] })
+      }
+      function pushStalk(onOut, offOut, wx, wy, wz, matrix, offset, gridSize) {
+        const col = Math.round(wx + offset), row = Math.round(wz + offset)
+        const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
+        if (onTile) onOut.push({ col, row, H: wy, color: matrix[row][col] ? STALK_DARK : GREEN_PALE, fixed: true })
+        else offOut.push({ x: col - offset, y: wy, z: row - offset, color: GREEN_PALE })
+      }
+      function buildLeaf(onOut, offOut, leaf, matrix, offset, gridSize, potH) {
+        const { cx, cz, az, size, baseH, rise, droop, cup } = leaf
+        const ca = Math.cos(az), sa = Math.sin(az)
+        const du = 1 / size, dv = 1 / (size * 1.7)
+        const ext = Math.ceil(size * 2.4)
+        const ccol = Math.round(cx + offset), crow = Math.round(cz + offset)
+        let lmaxY = baseH
+        const sSteps = Math.ceil(Math.hypot(cx, cz) + Math.abs(baseH - potH)) + 1
+        for (let s = 0; s <= sSteps; s++) {
+          const f = s / sSteps
+          pushStalk(onOut, offOut, cx * f, potH + (baseH - potH) * f, cz * f, matrix, offset, gridSize)
+        }
+        for (let col = ccol - ext; col <= ccol + ext; col++) {
+          for (let row = crow - ext; row <= crow + ext; row++) {
+            const dx = (col - offset) - cx, dz = (row - offset) - cz
+            const lz = dx * ca + dz * sa, lx = -dx * sa + dz * ca
+            const u = lx / size, v = lz / (size * 1.7)
+            if (v < 0 || v > 1 || u < -1 || u > 1) continue
+            if (!heart(u, v)) continue
+            const e1 = !heart(u + du, v) || !heart(u - du, v) || !heart(u, v + dv) || !heart(u, v - dv)
+            const e2 = !heart(u + 2 * du, v) || !heart(u - 2 * du, v) || !heart(u, v + 2 * dv) || !heart(u, v - 2 * dv)
+            const zone = leafZone(u, v, e1, e2)
+            const H = baseH + v * rise - droop * v * v - cup * u * u
+            pushCell(onOut, offOut, col, row, Math.max(potH, H), offset, zone, gridSize)
+            if (H > lmaxY) lmaxY = H
+          }
+        }
+        return lmaxY
+      }
+      function buildPot(out, potR, potH) {
+        for (let ly = 0; ly < potH; ly++) {
+          const rOut = potR * (0.7 + 0.3 * ly / (potH - 1))
+          const rIn = rOut - 1.6
+          const rim = ly === potH - 1
+          const m = Math.ceil(potR)
+          for (let x = -m; x <= m; x++) for (let z = -m; z <= m; z++) {
+            const d = Math.hypot(x, z)
+            if (d <= rOut && d >= rIn) out.push({ x, y: ly, z, color: rim ? POT_RIM : POT_BODY })
+          }
+        }
+        // soil a layer below the rim → visible terracotta lip, filled up to the wall so there's no see-through
+        const mf = Math.ceil(potR)
+        const soilTop = potH - 2
+        for (let ly = soilTop; ly >= Math.max(0, soilTop - 2); ly--) {
+          const rFill = potR * (0.7 + 0.3 * ly / (potH - 1)) - 1.1
+          for (let x = -mf; x <= mf; x++) for (let z = -mf; z <= mf; z++) {
+            if (Math.hypot(x, z) <= rFill) out.push({ x, y: ly, z, color: POT_SOIL })
+          }
+        }
+      }
+
+      function build(content, ec) {
+        // level M (not H): error-correction H forced a HIGHER version for longer URLs → finer modules → green speckling
+        // the leaves + marginal decode. M fits the same URL in a COARSER, cleaner, more scannable version (a 250-char URL
+        // is v11 not v15+); short URLs stay v9. Plus a dead-zone skip (v15/19/23 don't decode under the rosette).
+        const matrix = ec === 'H'
+          ? qrMatrixSafe(content, 'M', 9, CAL_DEAD)
+          : qrMatrix(content, { errorCorrectionLevel: 'M' })
+        const gridSize = matrix.length
+        const offset = (gridSize - 1) / 2
+
+        const groundCells = []
+        let dark = 0, total = 0
+        for (let row = 0; row < gridSize; row++) for (let col = 0; col < gridSize; col++) {
+          const isDark = matrix[row][col]; total++; if (isDark) dark++
+          groundCells.push({ x: col - offset, y: 0, z: row - offset, color: isDark ? FLOOR_DARK_C : CREAM_C })
+        }
+
+        const sc = gridSize / 33
+        const potR = POT_R * sc, potH = Math.max(4, Math.round(POT_H * sc))
+        const potCells = []
+        buildPot(potCells, potR, potH)
+
+        const leaves = [], overhang = []
+        // per-URL seeded RNG (FNV hash of the whole matrix → LCG) so each caladium is a GENUINELY different rosette —
+        // not just a rotation of one spiral. it varies leaf COUNT, the angular SPACING (jittered off the golden angle
+        // so the arrangement itself differs), the spiral TIGHTNESS, overall CLIMB, and per-leaf SIZE/droop.
+        let hsh = 2166136261 >>> 0
+        for (let r = 0; r < gridSize; r++) for (let c = 0; c < gridSize; c++) { hsh ^= matrix[r][c] ? 1 : 0; hsh = (hsh * 16777619) >>> 0 }
+        let rs = (hsh >>> 0) || 1
+        const rnd = () => { rs = (rs * 1664525 + 1013904223) >>> 0; return rs / 4294967296 }
+        // TALL climbing spiral (the original vertical pz likes): leaves spaced up a tall stalk, evenly enough that
+        // they can TOUCH on the flat surface but never INTERSECT in 3D. the golden angle does the heavy lifting —
+        // consecutive leaves sit ~137° apart so their blades point different ways; a modest jitter randomises the
+        // spread without collapsing that separation, and the tall even climb keeps each leaf clearly above the last.
+        const N = 9 + Math.floor(rnd() * 3)                  // 9–11 leaves
+        const GOLDEN = 2.39996323
+        const MAX_TILT = 1.4
+        const a0 = rnd() * Math.PI * 2                       // random start angle
+        const spin = GOLDEN * (0.94 + rnd() * 0.12)          // ≈ true golden (keeps consecutive leaves well separated) + slight per-plant tightness
+        const climbMul = 0.9 + rnd() * 0.4                   // per-plant overall HEIGHT of the climb
+        const sizeScale = 0.85 + rnd() * 0.3                 // overall leaf size (per-plant)
+        let az = a0
+        const defs = []
+        for (let k = 0; k < N; k++) {
+          az += spin + (rnd() - 0.5) * 0.5                   // modest random spread — looser than a rigid spiral, but golden separation holds
+          const t = N > 1 ? k / (N - 1) : 0
+          defs.push({
+            az, rc: (0.9 + rnd() * 2.0) * sc, climbH: (3 + t * 30 * climbMul + (rnd() - 0.5) * 3) * sc,   // TALL even climb → vertical, leaves spaced up the stalk, no bunching
+            size: (9 + t * 2.5 + rnd() * 3) * sc * sizeScale, rise: (8 + rnd() * 5) * sc, droop: (3 + rnd() * 3) * sc, cup: (3 + rnd() * 2.5) * sc
+          })
+        }
+        // per-leaf fit: SHRINK any leaf that would overhang the square, but only mildly GROW small ones (cap 1.4×).
+        // capping the growth stops leaves ballooning into one solid disc — ground peeks between them, so the centre
+        // alignment patterns stay visible (robust decode) and the gaps read as a more scattered, organic rosette.
+        const S = gridSize * 0.5 - 0.3
+        let maxY = 0, maxR = 0
+        for (const d of defs) {
+          const cA = Math.abs(Math.cos(d.az)), sA = Math.abs(Math.sin(d.az))
+          const reach = d.rc + d.size * 1.7, lat = d.size * 0.85
+          const bx = reach * cA + lat * sA, bz = reach * sA + lat * cA
+          const f = Math.min(1.8, S / Math.max(bx, bz))
+          const rc = d.rc * f, size = d.size * f
+          const baseH = potH + Math.max(d.climbH, rc / MAX_TILT)
+          const leaf = { cx: Math.cos(d.az) * rc, cz: Math.sin(d.az) * rc, az: d.az, size, baseH, rise: d.rise, droop: d.droop, cup: d.cup * f }
+          const ly = buildLeaf(leaves, overhang, leaf, matrix, offset, gridSize, potH)
+          if (ly > maxY) maxY = ly
+          const rr = rc + size * 1.7; if (rr > maxR) maxR = rr
+        }
+        if (potR > maxR) maxR = potR
+
+        // colour every on-tile leaf cell by its module → exposed tops = real QR, the rest = matching mottle
+        const leafCells = []
+        for (const v of leaves) {
+          const color = v.fixed ? v.color : (matrix[v.row][v.col] ? ZD[v.zone] : ZL[v.zone])
+          leafCells.push({ x: v.col - offset, y: v.H, z: v.row - offset, color })
+        }
+
+        // NO-FADE + UNIFORM SOIL: the pot/soil never fades — it stays solid in BOTH the 3D and the top-down (a true,
+        // consistent projection, never transparent). it's a UNIFORM terracotta/soil with NO per-module QR tint, so the
+        // pot reads clean (no speckles). the handful of central modules the pot covers are carried by the leaf canopy
+        // above it plus the code's error correction, so the flat top-down still scans cleanly. (verified 0% decode-fail
+        // across the whole length range.) potCells keep the solid colours set in buildPot.
+
+        return {
+          groups: [
+            { cells: groundCells, fade: false, sway: false },
+            { cells: potCells, fade: false, sway: false },   // NO-FADE — pot/soil stay solid, uniform (no per-module tint)
+            { cells: leafCells, fade: false, sway: true },
+            { cells: overhang, fade: true, sway: true }
+          ],
+          view: { span: gridSize, maxR, maxY, spanK: 0.6, radK: 0.82, heightK: 0.55, focusK: 0.4 }
+        }
+      }
+      return { build }
+    })()
+
+    // ======================================================================
+    // PINE — tiered notched fir. The body is dark green; only the exposed top
+    // needle of each cell is coloured by its module, so the canopy carries the
+    // QR and (in snow) the white lands only on the upward tops = snow resting ON
+    // the tree. forest / snow swap palette + ground.
+    // ======================================================================
+    const PINE = (() => {
+      const GROUND = {
+        forest: { dark: new THREE.Color('#3f3020'), light: new THREE.Color('#c2a878') },
+        snow:   { dark: new THREE.Color('#515c68'), light: new THREE.Color('#eef3f6') }   // dark slate (lum ≈90) — old #7a858c was ~130, on the binariser threshold → finders misread
+      }
+      const TRUNK = { forest: new THREE.Color('#5e4329'), snow: new THREE.Color('#5a4636') }
+      const PAL = {
+        forest: { dark: new THREE.Color('#244f29'), pale: new THREE.Color('#a6c96a') },
+        snow:   { dark: new THREE.Color('#2f5a37'), pale: new THREE.Color('#eef3f4') }
+      }
+      // earthy light/dark bark pair for any trunk cube that peeks from the top → carries the QR (no fade)
+      const TR_MATCH = { forest: { l: new THREE.Color('#b08a5a'), d: new THREE.Color('#3a2a18') }, snow: { l: new THREE.Color('#a9968a'), d: new THREE.Color('#3a2c22') } }
+      const PINE_DEAD = new Set([15, 16, 19, 23]) // QR versions that don't decode under the cone (all at 360+ char URLs)
+      function canopyTiered(d, outer, TIERS, LAYERS_PER_TIER) {
+        const total = TIERS * LAYERS_PER_TIER, out = []
+        for (let L = 0; L < total; L++) {
+          const tier = Math.floor(L / LAYERS_PER_TIER)
+          const p = (L - tier * LAYERS_PER_TIER) / LAYERS_PER_TIER
+          const taper = tier === TIERS - 1 ? 0.12 : 0.46
+          const r = outer * (1 - tier * 0.18) * (1 - p * (1 - taper))
+          if (d <= r) out.push(L)
+        }
+        return out
+      }
+      function build(content, variant) {
+        // FIXED version 9 (53×53): like all v7+ it carries SIX alignment patterns (auto picked v3 for longer URLs, whose
+        // SINGLE central pattern sits under the cone and gets obscured → undecodable). v9 holds ~174 bytes before any
+        // fallback, so every realistic URL renders at ONE clean grid and — crucially — it SKIPS v8 (49×53), the awkward
+        // density where the soft forest greens blur below the binariser threshold. this keeps the soft palette scannable
+        // across the whole realistic range (≈290 chars) with no contrast boost. trade-off: 53² matches the caladium grid.
+        // min v9, level M, skipping the dead-zone versions (v15/16/19/23 don't decode under the cone — v15/16/19 are
+        // contrast-marginal for the soft forest greens at that module size, v23 is structural; snow's boost saves all but v23).
+        const matrix = qrMatrixSafe(content, 'M', 9, PINE_DEAD)
+        const gridSize = matrix.length
+        const cx = (gridSize - 1) / 2, cy = (gridSize - 1) / 2
+        const offset = (gridSize - 1) / 2
+        // proportions SCALE with the grid so the cone stays a proper fir at any QR version. the OLD fixed sizes made
+        // a ~39-tall cone even on a small (short-URL) grid → extreme height softened the fine module edges and the
+        // level-M code stopped decoding for longer URLs. scaling keeps height ≈ 1.5× width → clean modules, robust.
+        const sc = gridSize / 33
+        const TRUNK_LAYERS = Math.max(5, Math.round(9 * sc))   // taller bole so the cone lifts off the ground (not a low bush)
+        const TIERS = 5, LAYERS_PER_TIER = Math.max(4, Math.round(5 * sc))
+        const outer = gridSize * 0.32
+        const canopyBase = TRUNK_LAYERS * CUBE
+        const G = GROUND[variant], TR = TRUNK[variant], P = PAL[variant], TM = TR_MATCH[variant]
+
+        const groundCells = []
+        for (let row = 0; row < gridSize; row++) for (let col = 0; col < gridSize; col++)
+          groundCells.push({ x: col - offset, y: 0, z: row - offset, color: matrix[row][col] ? G.dark : G.light })
+
+        // round, gently tapered bole — a pine trunk is a slim ROUND cylinder, a touch wider at the base than up top.
+        // per-layer circular cross-section (octagonal at this voxel scale) + an upward taper so it reads round, not a
+        // square prism. purely cosmetic for the 3D: the top-down QR is unaffected (trunk cells are hidden under the
+        // canopy or QR-matched on the projection, so every module still renders its true on/off colour).
+        const trunkBaseR = Math.max(1.7, 2.1 * sc)
+        const trunkCells = []
+        for (let L = 0; L < TRUNK_LAYERS; L++) {
+          const rL = trunkBaseR * (1 - 0.30 * (L / Math.max(1, TRUNK_LAYERS - 1))) // taper: widest at the base
+          const r2 = rL * rL
+          for (let row = 0; row < gridSize; row++) for (let col = 0; col < gridSize; col++) {
+            const dc = col - cx, dr = row - cy
+            if (dc * dc + dr * dr >= r2) continue
+            trunkCells.push({ x: col - offset, y: L * CUBE, z: row - offset, color: TR, col, row })
+          }
+        }
+
+        const canopy = []
+        for (let row = 0; row < gridSize; row++) for (let col = 0; col < gridSize; col++) {
+          const d = Math.hypot(col - cx, row - cy)
+          if (d >= outer) continue
+          const layers = canopyTiered(d, outer, TIERS, LAYERS_PER_TIER)
+          if (!layers.length) continue
+          for (const L of layers) canopy.push({ col, row, baseY: canopyBase + L * CUBE })
+        }
+        const cellTop = new Map()
+        for (const v of canopy) { const k = v.col * 4096 + v.row; const m = cellTop.get(k); if (m === undefined || v.baseY > m) cellTop.set(k, v.baseY) }
+        const canopyCells = []
+        for (const v of canopy) {
+          const top = v.baseY >= cellTop.get(v.col * 4096 + v.row) - 0.001
+          const dark = matrix[v.row][v.col]
+          canopyCells.push({ x: v.col - offset, y: v.baseY, z: v.row - offset, color: top ? (dark ? P.dark : P.pale) : P.dark })
+        }
+
+        // NO-FADE: the trunk never fades. cubes hidden under the canopy stay solid bark; any that peek from straight
+        // above are QR-matched (earthy light/dark) so the flat top-down is a true, scannable projection.
+        const canopyTopAt = new Map()
+        for (const v of canopy) { const k = v.col * 4096 + v.row; const m = canopyTopAt.get(k); if (m === undefined || v.baseY > m) canopyTopAt.set(k, v.baseY) }
+        for (const v of trunkCells) {
+          const k = v.col * 4096 + v.row
+          if ((v.y + 0.001) > (canopyTopAt.get(k) ?? -Infinity)) v.color = matrix[v.row][v.col] ? TM.d : TM.l   // peeks → carry the QR
+        }
+
+        const totalHeight = TRUNK_LAYERS + TIERS * LAYERS_PER_TIER
+        return {
+          groups: [
+            { cells: groundCells, fade: false, sway: false },
+            { cells: trunkCells, fade: false, sway: false },   // NO-FADE — solid bark where hidden, QR-matched where it peeks
+            { cells: canopyCells, fade: false, sway: true }
+          ],
+          view: { span: gridSize, maxR: 0, maxY: totalHeight, spanK: 0.64, radK: 0, heightK: 0.52, focusK: 0.42 }
+        }
+      }
+      return { build }
+    })()
+
+    const FRANGI = (() => {
+      const C = h => new THREE.Color(h)
+      const FRANGI_DEAD = new Set([19, 23, 29]) // QR versions that don't decode under the canopy (all at 320+ char URLs)
+      const LEN = 3.7
+      const CREAM_C = C('#f0e4cd'), FLOOR_DARK_C = C('#463726')
+      const PETIOLE_DARK = C('#7a4030'), PETIOLE_PALE = C('#cf9478')
+      const ZD = { midrib: C('#43301e'), blade: C('#22512a'), vein: C('#1c4824'), margin: C('#1b4220') }
+      const ZL = { midrib: C('#d8c4a0'), blade: C('#bcd29f'), vein: C('#dbe7bd'), margin: C('#aac08f') }
+      const ZN = { midrib: C('#5a3a22'), blade: C('#345c2c'), vein: C('#dbe7bd'), margin: C('#1b4220') }
+      const PALETTES = [
+        { name: 'white', eye: [C('#dd9a26'), C('#f0c038')], grad: [C('#f4d062'), C('#f6df93'), C('#f6ebc2'), C('#f7f2e2'), C('#fefdfa')] },
+        { name: 'ivory', eye: [C('#d9982a'), C('#eec141')], grad: [C('#f0d36e'), C('#f2e09a'), C('#f1ead0'), C('#f6f1de'), C('#fdfbf2')] },
+        { name: 'lemon', eye: [C('#cf9020'), C('#ecb52c')], grad: [C('#f0d860'), C('#eee596'), C('#ecefbe'), C('#f3f4d6'), C('#fdfceb')] }
+      ]
+      const FL_PETAL_D = C('#6e4d24'), FL_EYE_D = C('#805611')
+      const POT_R = 7.5, POT_H = 11   // a touch smaller than the caladium pot (8.5) — frangipani pot was reading too big
+      const POT_BODY = C('#b5602f'), POT_RIM = C('#c87544'), POT_SOIL = C('#46331f')
+      const BARK_L = [C('#ccb892'), C('#c89a72'), C('#c3b083')]
+      const BARK_D = [C('#3a2a16'), C('#4e2d1a'), C('#2c2110')]
+      const BARK_C = [C('#7d6c4f'), C('#8a5a3c'), C('#5e5138')]
+      function frac(x) { return x - Math.floor(x) }
+      function makeRng(seed) { let s = (seed >>> 0) || 1; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296 } }
+      function hashMatrix(m) { let h = 2166136261 >>> 0; for (let r = 0; r < m.length; r++) for (let c = 0; c < m.length; c++) { h ^= m[r][c] ? 1 : 0; h = (h * 16777619) >>> 0 } return h }
+      function leafShape(u, v) { if (v < 0 || v > 1) return false; const w = 0.72 * Math.pow(Math.sin(Math.PI * Math.pow(Math.min(1, v * 1.05), 0.6)), 0.36); return Math.abs(u) <= w }
+      function leafZone(u, v, e1, e2) { if (e1 || e2) return 'margin'; const t = Math.abs(u); if (t < 0.11) return 'midrib'; if (frac(v * 7.5 - t * 2.4) < 0.16) return 'vein'; return 'blade' }
+      function pushCell(onOut, offOut, col, row, H, offset, zone, gridSize) {
+        const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
+        if (onTile) onOut.push({ col, row, H, zone }); else offOut.push({ x: col - offset, y: H, z: row - offset, color: ZN[zone] })
+      }
+      function pushStalk(onOut, offOut, wx, wy, wz, matrix, offset, gridSize) {
+        const col = Math.round(wx + offset), row = Math.round(wz + offset)
+        const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
+        if (onTile) onOut.push({ col, row, H: wy, color: matrix[row][col] ? PETIOLE_DARK : PETIOLE_PALE, fixed: true })
+        else offOut.push({ x: col - offset, y: wy, z: row - offset, color: PETIOLE_PALE })
+      }
+      function buildLeaf(onOut, offOut, leaf, matrix, offset, gridSize, baseY0, ox = 0, oz = 0) {
+        const { cx, cz, az, size, baseH, rise, droop, cup } = leaf
+        const ca = Math.cos(az), sa = Math.sin(az), du = 1 / size, dv = 1 / (size * LEN)
+        const ext = Math.ceil(size * (LEN + 0.6)), ccol = Math.round(cx + offset), crow = Math.round(cz + offset)
+        let lmaxY = baseH
+        const sSteps = Math.ceil(Math.hypot(cx - ox, cz - oz) + Math.abs(baseH - baseY0)) + 1
+        for (let s = 0; s <= sSteps; s++) { const f = s / sSteps; pushStalk(onOut, offOut, ox + (cx - ox) * f, baseY0 + (baseH - baseY0) * f, oz + (cz - oz) * f, matrix, offset, gridSize) }
+        for (let col = ccol - ext; col <= ccol + ext; col++) for (let row = crow - ext; row <= crow + ext; row++) {
+          const dx = (col - offset) - cx, dz = (row - offset) - cz
+          const lz = dx * ca + dz * sa, lx = -dx * sa + dz * ca
+          const u = lx / size, v = lz / (size * LEN)
+          if (v < 0 || v > 1 || u < -1 || u > 1) continue
+          if (!leafShape(u, v)) continue
+          const e1 = !leafShape(u + du, v) || !leafShape(u - du, v) || !leafShape(u, v + dv) || !leafShape(u, v - dv)
+          const e2 = !leafShape(u + 2 * du, v) || !leafShape(u - 2 * du, v) || !leafShape(u, v + 2 * dv) || !leafShape(u, v - 2 * dv)
+          const zone = leafZone(u, v, e1, e2)
+          const H = baseH + v * rise - droop * v * v - cup * u * u
+          pushCell(onOut, offOut, col, row, Math.max(2, H), offset, zone, gridSize)
+          if (H > lmaxY) lmaxY = H
+        }
+        return lmaxY
+      }
+      function buildFlower(matrix, offset, gridSize, fcx, fcz, baseY, R, sc, twist, tilt, faceAz, pal) {
+        const P = 5, sector = (Math.PI * 2) / P
+        const st = Math.sin(tilt), ct = Math.cos(tilt), ca = Math.cos(faceAz), sa = Math.sin(faceAz)
+        const nx = st * ca, ny = ct, nz = st * sa, ex = -sa, ez = ca, ux = -ca * ct, uy = st, uz = -sa * ct
+        const seen = new Map(), vox = []
+        let top = baseY
+        const dr = 0.42 / R, dth = 0.5 / R
+        for (let r = 0; r <= 1.0001; r += dr) for (let th = 0; th < Math.PI * 2; th += dth) {
+          let lightColor, h
+          if (r < 0.16) { h = (0.40 - (r / 0.16) * 0.12) * R; lightColor = r < 0.07 ? pal.eye[0] : pal.eye[1] }
+          else {
+            const a = th + twist + 0.75 * r
+            const pc = (((a % sector) + sector) % sector) / sector
+            const petalW = Math.pow(Math.sin(Math.PI * pc), 0.6)
+            const reach = 0.46 + 0.54 * petalW
+            if (r > reach) continue
+            const ridge = Math.pow(pc, 1.2) * 0.40 * R, lift = (r - 0.16) * 0.07 * R
+            h = ridge + lift
+            const tnorm = (r - 0.16) / 0.84, swirlBias = (1 - pc) * 0.55
+            const gi = Math.max(0, Math.min(pal.grad.length - 1, Math.floor((tnorm - swirlBias) * pal.grad.length)))
+            lightColor = pal.grad[gi]
+          }
+          const px = r * R * Math.cos(th), py = r * R * Math.sin(th)
+          const wx = Math.round(fcx + px * ex + py * ux + h * nx)
+          const wy = Math.round(baseY + py * uy + h * ny)
+          const wz = Math.round(fcz + px * ez + py * uz + h * nz)
+          const key = wx + ',' + wy + ',' + wz
+          if (!seen.has(key)) { seen.set(key, 1); vox.push({ x: wx, y: wy, z: wz, color: lightColor }) }
+          if (wy > top) top = wy
+        }
+        return { vox, top }
+      }
+      function flowerDarkCells(vox, matrix, offset, gridSize) {
+        const cells = new Set(); let dark = 0
+        for (const v of vox) {
+          const col = Math.round(v.x + offset), row = Math.round(v.z + offset)
+          if (col < 0 || row < 0 || col >= gridSize || row >= gridSize) continue
+          const k = col + ',' + row; if (cells.has(k)) continue; cells.add(k); if (matrix[row][col]) dark++
+        }
+        return dark
+      }
+      function drawPeduncle(onOut, x0, y0, z0, x1, y1, z1, matrix, offset, gridSize) {
+        const steps = Math.ceil(Math.hypot(x1 - x0, z1 - z0) + Math.abs(y1 - y0)) + 1
+        for (let s = 0; s <= steps; s++) { const f = s / steps; pushStalk(onOut, [], x0 + (x1 - x0) * f, y0 + (y1 - y0) * f, z0 + (z1 - z0) * f, matrix, offset, gridSize) }
+      }
+      function buildPot(out, potR, potH) {
+        for (let ly = 0; ly < potH; ly++) {
+          const rOut = potR * (0.72 + 0.28 * ly / (potH - 1)), rIn = rOut - 1.6, rim = ly === potH - 1, m = Math.ceil(potR)
+          for (let x = -m; x <= m; x++) for (let z = -m; z <= m; z++) { const d = Math.hypot(x, z); if (d <= rOut && d >= rIn) out.push({ x, y: ly, z, kind: rim ? 'rim' : 'pot' }) }
+        }
+        const mf = Math.ceil(potR), soilTop = potH - 2
+        for (let ly = soilTop; ly >= Math.max(0, soilTop - 2); ly--) {
+          const rFill = potR * (0.72 + 0.28 * ly / (potH - 1)) - 1.1
+          for (let x = -mf; x <= mf; x++) for (let z = -mf; z <= mf; z++) if (Math.hypot(x, z) <= rFill) out.push({ x, y: ly, z, kind: 'soil' })
+        }
+      }
+      function buildTrunk(out, trunkR, potH, trunkTop) {
+        const m = Math.ceil(trunkR)
+        for (let ly = potH - 1; ly <= trunkTop; ly++) {
+          const r = trunkR * (1 - 0.16 * (ly - potH) / Math.max(1, trunkTop - potH))
+          for (let x = -m; x <= m; x++) for (let z = -m; z <= m; z++) if (Math.hypot(x, z) <= r) out.push({ x, y: ly, z, kind: 'bark' })
+        }
+      }
+      function buildBranch(out, x0, y0, z0, x1, y1, z1, r0) {
+        const steps = Math.ceil(Math.hypot(x1 - x0, z1 - z0) + Math.abs(y1 - y0)) + 1
+        for (let s = 0; s <= steps; s++) {
+          const f = s / steps, bx = x0 + (x1 - x0) * f, by = y0 + (y1 - y0) * f, bz = z0 + (z1 - z0) * f
+          const r = Math.max(1.0, r0 * (1 - 0.5 * f)), m = Math.ceil(r), cx = Math.round(bx), cz = Math.round(bz), cy = Math.round(by)
+          for (let dx = -m; dx <= m; dx++) for (let dz = -m; dz <= m; dz++) if (Math.hypot(dx, dz) <= r) out.push({ x: cx + dx, y: cy, z: cz + dz, kind: 'bark' })
+        }
+      }
+      function bloomSpotsNear(matrix, gridSize, rng, ccol, crow, Rc, K, sep) {
+        const samp = Math.max(2, Math.round(gridSize * 0.05)), cand = []
+        for (let dc = -Rc; dc <= Rc; dc++) for (let dr = -Rc; dr <= Rc; dr++) {
+          if (Math.hypot(dc, dr) > Rc) continue
+          const col = ccol + dc, row = crow + dr
+          if (col < 0 || row < 0 || col >= gridSize || row >= gridSize) continue
+          let lit = 0, n = 0
+          for (let a = -samp; a <= samp; a++) for (let b = -samp; b <= samp; b++) {
+            if (Math.hypot(a, b) > samp) continue
+            const c2 = col + a, r2 = row + b
+            if (c2 < 0 || r2 < 0 || c2 >= gridSize || r2 >= gridSize) continue
+            if (!matrix[r2][c2]) lit++; n++
+          }
+          cand.push({ col, row, d: n ? lit / n : 0, j: rng() * 0.03 })
+        }
+        cand.sort((p, q) => (q.d + q.j) - (p.d + p.j))
+        const picks = []
+        for (const c of cand) { if (picks.length >= K) break; if (picks.every(p => Math.hypot(p.col - c.col, p.row - c.row) > sep)) picks.push(c) }
+        return picks
+      }
+      function generate(matrix) {
+        const gridSize = matrix.length, offset = (gridSize - 1) / 2, sc = gridSize / 33
+        const rng = makeRng(hashMatrix(matrix))
+        const ground = []
+        for (let row = 0; row < gridSize; row++) for (let col = 0; col < gridSize; col++) ground.push({ x: col - offset, y: 0, z: row - offset, color: matrix[row][col] ? FLOOR_DARK_C : CREAM_C })
+        const potR = POT_R * sc, potH = Math.max(4, Math.round(POT_H * sc))
+        const trunkR = Math.max(1.3, 2.0 * sc), forkY = potH + Math.round(gridSize * 0.2)
+        const pot = []; buildPot(pot, potR, potH)
+        const trunk = []; buildTrunk(trunk, trunkR, potH, forkY)
+        const NB = 2, a0b = rng() * Math.PI * 2, tipD = gridSize * 0.16, tips = []
+        for (let b = 0; b < NB; b++) {
+          const ang = a0b + (b / NB) * Math.PI * 2 + (rng() - 0.5) * 0.22, len = 0.85 + rng() * 0.25
+          const tx = Math.cos(ang) * tipD * len, tz = Math.sin(ang) * tipD * len
+          const ty = forkY + Math.round(gridSize * (0.05 + b * 0.14 + rng() * 0.05))
+          tips.push({ x: tx, z: tz, y: ty })
+          buildBranch(trunk, 0, forkY, 0, tx, ty, tz, trunkR * 0.62)
+        }
+        const leaves = [], overhang = [], flower = [], MAX_TILT = 1.4, S = gridSize * 0.5 - 0.3
+        const pal = PALETTES[hashMatrix(matrix) % PALETTES.length]
+        let maxY = 0, maxR = 0, flBudget = 5 + (rng() < 0.6 ? 1 : 0)
+        for (let ti = 0; ti < tips.length; ti++) {
+          const tip = tips[ti]
+          const Nl = 7 + Math.floor(rng() * 2), a0 = rng() * Math.PI * 2, outAz = Math.atan2(tip.z, tip.x)
+          let tipLeafTop = tip.y
+          for (let k = 0; k < Nl; k++) {
+            const az = a0 + (k / Nl) * Math.PI * 2 + (rng() - 0.5) * 0.18
+            const dirScale = 0.4 + 0.6 * (Math.cos(az - outAz) * 0.5 + 0.5)
+            const rc = (2.2 + rng() * 1.4) * sc * (0.7 + 0.3 * dirScale)
+            const size = (14 + rng() * 5) * sc * dirScale
+            const cA = Math.abs(Math.cos(az)), sA = Math.abs(Math.sin(az))
+            const reach0 = rc + size * LEN, lat = size * 0.72
+            const fLimX = (0.88 * S - Math.abs(tip.x)) / (reach0 * cA + lat * sA)
+            const fLimZ = (0.88 * S - Math.abs(tip.z)) / (reach0 * sA + lat * cA)
+            const f = Math.min(1.0, fLimX, fLimZ)
+            if (f < 0.12) continue
+            const rcf = rc * f, sizef = size * f
+            const baseH = tip.y + Math.max((rng() * 3 - 1) * sc, rcf / MAX_TILT)
+            const leaf = { cx: tip.x + Math.cos(az) * rcf, cz: tip.z + Math.sin(az) * rcf, az, size: sizef, baseH, rise: (2.2 + rng() * 1.2) * sc, droop: (1.5 + rng() * 2) * sc, cup: (1.5 + rng() * 1.5) * sc }
+            const ly = buildLeaf(leaves, overhang, leaf, matrix, offset, gridSize, tip.y, tip.x, tip.z)
+            if (ly > maxY) maxY = ly
+            if (ly > tipLeafTop) tipLeafTop = ly
+            const rr = Math.hypot(tip.x, tip.z) + rcf + sizef * LEN; if (rr > maxR) maxR = rr
+          }
+          const tcol = Math.round(tip.x + offset), trow = Math.round(tip.z + offset)
+          const nodeY = tip.y + Math.round(0.5 * sc)
+          drawPeduncle(leaves, tip.x, tip.y, tip.z, tip.x, nodeY, tip.z, matrix, offset, gridSize)
+          const tipsLeft = tips.length - ti, nFl = Math.min(flBudget, Math.round(flBudget / tipsLeft + 0.2))
+          flBudget -= nFl
+          const pool = bloomSpotsNear(matrix, gridSize, rng, tcol, trow, Math.round(gridSize * 0.095), nFl * 5, gridSize * 0.05)
+          const PER = 50
+          const leafTopAt = new Map()
+          for (const lv of leaves) { const k = lv.col + ',' + lv.row; const c = leafTopAt.get(k); if (c === undefined || lv.H > c) leafTopAt.set(k, lv.H) }
+          const leafClearance = (fcx, fcz, rad) => { let m = -Infinity; const c0 = Math.round(fcx + offset), r0 = Math.round(fcz + offset), R = Math.ceil(rad); for (let dc = -R; dc <= R; dc++) for (let dr = -R; dr <= R; dr++) { const v = leafTopAt.get((c0 + dc) + ',' + (r0 + dr)); if (v !== undefined && v > m) m = v } return m }
+          const usedXY = []
+          for (let i = 0; i < nFl; i++) {
+            const fbY0 = nodeY + Math.round(0.5 * sc)
+            const tilt = rng() * 0.12, faceAz = rng() * Math.PI * 2, twist = rng() * Math.PI * 2
+            let R0 = gridSize * (0.11 + rng() * 0.075), pick = null
+            for (const sp of pool) {
+              if (sp.taken || usedXY.some(u => Math.hypot(u.c - sp.col, u.r - sp.row) < gridSize * 0.06)) continue
+              const b = buildFlower(matrix, offset, gridSize, sp.col - offset, sp.row - offset, fbY0, R0, sc, twist, tilt, faceAz, pal)
+              const dk = flowerDarkCells(b.vox, matrix, offset, gridSize)
+              if (!pick || dk < pick.dk) pick = { sp, built: b, dk }
+              if (dk <= PER) break
+            }
+            if (!pick) break
+            pick.sp.taken = true; usedXY.push({ c: pick.sp.col, r: pick.sp.row })
+            const fcx = pick.sp.col - offset, fcz = pick.sp.row - offset
+            let R = R0, dk = pick.dk
+            for (let t = 0; t < 6 && dk > PER; t++) { R *= 0.86; dk = flowerDarkCells(buildFlower(matrix, offset, gridSize, fcx, fcz, fbY0, R, sc, twist, tilt, faceAz, pal).vox, matrix, offset, gridSize) }
+            const clr = leafClearance(fcx, fcz, R * 0.6)
+            const fbY = Math.max(nodeY, (clr > -Infinity ? clr : nodeY) + Math.round(0.2 * sc))
+            const built = buildFlower(matrix, offset, gridSize, fcx, fcz, fbY, R, sc, twist, tilt, faceAz, pal)
+            drawPeduncle(leaves, tip.x, nodeY, tip.z, fcx, fbY, fcz, matrix, offset, gridSize)
+            for (const v of built.vox) flower.push(v)
+            if (built.top > maxY) maxY = built.top
+          }
+        }
+        if (potR > maxR) maxR = potR
+        for (const v of leaves) { v.x = v.col - offset; v.z = v.row - offset; v.y = v.H; v.color = v.fixed ? v.color : (matrix[v.row][v.col] ? ZD[v.zone] : ZL[v.zone]) }
+        const potColor = { rim: POT_RIM, pot: POT_BODY, soil: POT_SOIL }
+        for (const v of pot) v.color = potColor[v.kind] || POT_BODY
+        const canopyY = new Map()
+        for (const v of leaves) { const k = v.col + ',' + v.row; const c = canopyY.get(k); if (c === undefined || v.H > c) canopyY.set(k, v.H) }
+        for (const v of flower) { const k = Math.round(v.x + offset) + ',' + Math.round(v.z + offset); const c = canopyY.get(k); if (c === undefined || v.y > c) canopyY.set(k, v.y) }
+        for (const v of trunk) {
+          const col = Math.round(v.x + offset), row = Math.round(v.z + offset), k = col + ',' + row
+          const n = Math.abs(Math.sin((v.x * 12.9898 + v.y * 4.1414 + v.z * 78.233)) * 43758.5) % 1
+          const vein = n < 0.2 ? 1 : n < 0.35 ? 2 : 0
+          if (v.y > (canopyY.get(k) ?? -Infinity)) { const dk = (col >= 0 && row >= 0 && col < gridSize && row < gridSize) ? matrix[row][col] : false; v.color = (dk ? BARK_D : BARK_L)[vein] }
+          else v.color = BARK_C[vein]
+        }
+        return { ground, pot, trunk, leaves, overhang, flower, gridSize, maxY, maxR }
+      }
+      function build(content, ver) {
+        // min v17, level H (its dense grid needs the error-correction margin), skipping dead-zone versions v19/23/29
+        // (don't decode under the canopy — all at 320+ char URLs). short/realistic URLs stay v17, untouched.
+        const matrix = qrMatrixSafe(content, 'H', ver || 17, FRANGI_DEAD)
+        const d = generate(matrix)
+        // NO-FADE: only the off-tile overhang fades on flatten; pot/trunk/leaves/flower stay solid → true projection
+        return {
+          groups: [
+            { cells: d.ground, fade: false, sway: false },
+            { cells: d.pot.concat(d.trunk), fade: false, sway: false },
+            { cells: d.leaves, fade: false, sway: true },
+            { cells: d.overhang.map(v => ({ x: v.x, y: v.y, z: v.z, color: v.color })), fade: true, sway: true },
+            { cells: d.flower, fade: false, sway: true }
+          ],
+          view: { span: d.gridSize, maxR: d.maxR, maxY: d.maxY, spanK: 0.58, radK: 0.78, heightK: 0.6, focusK: 0.42 }
+        }
+      }
+      return { build }
+    })()
+
+
+    // ======================================================================
+    // ORCHID — Papilionanthe Miss Joaquim (Vanda Miss Joaquim), Singapore's
+    // national flower (v1). A monopodial CLIMBING vine, not a rosette: a potted
+    // central stem climbs up with alternating TERETE (pencil-shaped, round) dark-
+    // green leaves, crowned by a raceme of the signature flowers — pinkish-mauve
+    // tepals around a deeper-magenta fan LIP with an orange throat. Terete leaves
+    // are thin so they occlude few cells; the full ground QR carries the code and
+    // every stem/leaf cell on the tile is module-matched for cohesion. The flowers
+    // are the deliberate SOLID exception (small, placed over the QR's LIGHTEST
+    // cells so level-M error correction absorbs them) — like the frangipani bloom.
+    // ======================================================================
+    const ORCHID = (() => {
+      const C = h => new THREE.Color(h)
+      const CREAM_C = C('#f1ece2'), FLOOR_DARK_C = C('#566159')
+      // pot + soil are MODULE-MATCHED too (the orchid's thin terete leaves leave the pot exposed, unlike the
+      // caladium whose broad canopy blankets it — a solid pot here would smother the central modules). Earthy
+      // two-tone pairs hugging the ground band so the exposed pot/soil stays luminance-correct and decode-safe.
+      const POT = { l: C('#e6c399'), d: C('#74502f') }    // terracotta body
+      const RIM = { l: C('#eccaa0'), d: C('#7e5a38') }    // terracotta rim (a touch lighter)
+      const SOIL = { l: C('#cdb88f'), d: C('#6a4e30') }   // potting soil (matched pair — kept for reference)
+      const SOIL_FLAT = C('#9c7547')                       // UNIFORM soil — verified 355/355 decode (small pot + level-M EC absorb it)
+      // terete leaf + stem greens (decode-tuned: every dark tone ≲90 luminance, every light tone ≳180)
+      // every matched tone HUGS the ground's own luminance band (ground dark ≈93, light ≈236) so the dense central
+      // canopy never drags jsQR's LOCAL adaptive threshold off — darks ≈88–98, lights ≈205–215 (over-dark leaves
+      // were pulling the centre threshold down and flipping nearby ground modules).
+      const LD = C('#3c6b3e'), LL = C('#bfdca4')          // leaf: dark module / light module
+      const LMID_D = C('#437443'), LMID_L = C('#c9e6ad')  // round-tube highlight ridge
+      const STK_D = C('#4c6733'), STK_L = C('#b9d69a')    // stem (climbing stalk)
+      // flower palette — each part is MODULE-MATCHED (a light tone ≳180 luminance for a light module, a dark tone
+      // ≲90 for a dark module), so every bloom cell reads as its true module and the QR decodes identically to the
+      // bare ground code — no matter where a bloom lands. The orchid's identity is carried by HUE (magenta lip,
+      // orange throat, mauve petals, whitish sepals), which scanners ignore; the light/dark is fine shading.
+      const TEP = { l: C('#ecc2e1'), d: C('#8d4189') }    // rosy-violet petals + dorsal sepal (the twisted "hood")
+      const SEP = { l: C('#ded2de'), d: C('#5f5166') }    // pale-mauve lateral sepals (the broad side wings)
+      const LIP = { l: C('#f0bcd9'), d: C('#9c3a6c') }    // violet-rose fan LIP (mid-lobe) — also the purple speckle over the orange
+      const THROAT = { l: C('#f7c863'), d: C('#8a5010') } // FIERY ORANGE eye/disk at the heart of the lip
+      const GOLD = { l: C('#f6cf6b'), d: C('#855f10') }    // YELLOW innermost core of the disk (the callus / hairy groove)
+      const ORCH_DEAD = new Set([15, 19, 23])             // versions that don't decode under the crown (all 360+ char URLs)
+      // ISO/IEC 18004 alignment-pattern row/col positions per QR version (index = version). A solid bloom landing on
+      // an alignment pattern destroys the code, so blooms must steer clear of these the same way they avoid the finders.
+      const ALIGN_POS = [[], [], [6, 18], [6, 22], [6, 26], [6, 30], [6, 34], [6, 22, 38], [6, 24, 42], [6, 26, 46], [6, 28, 50], [6, 30, 54], [6, 32, 58], [6, 34, 62], [6, 26, 46, 66], [6, 26, 48, 70], [6, 26, 50, 74], [6, 30, 54, 78], [6, 30, 56, 82], [6, 30, 58, 86], [6, 34, 62, 90], [6, 28, 50, 72, 94], [6, 26, 50, 74, 98], [6, 30, 54, 78, 102], [6, 28, 54, 80, 106], [6, 32, 58, 84, 110], [6, 30, 58, 86, 114], [6, 34, 62, 90, 118], [6, 26, 50, 74, 98, 122], [6, 30, 54, 78, 102, 126], [6, 26, 52, 78, 104, 130], [6, 30, 56, 82, 108, 134], [6, 34, 60, 86, 112, 138], [6, 30, 58, 86, 114, 142], [6, 34, 62, 90, 118, 146], [6, 30, 54, 78, 102, 126, 150], [6, 24, 50, 76, 102, 128, 154], [6, 28, 54, 80, 106, 132, 158], [6, 32, 58, 84, 110, 136, 162], [6, 26, 54, 82, 110, 138, 166], [6, 30, 58, 86, 114, 142, 170]]
+      function alignCentres(gridSize) {                   // (col,row) centres for this grid, minus the three that coincide with finders
+        const v = Math.round((gridSize - 17) / 4), pos = ALIGN_POS[v] || [], last = pos.length - 1, out = []
+        for (let i = 0; i < pos.length; i++) for (let j = 0; j < pos.length; j++) {
+          if ((i === 0 && j === 0) || (i === 0 && j === last) || (i === last && j === 0)) continue
+          out.push([pos[i], pos[j]])
+        }
+        return out
+      }
+
+      // pot + soil, every cell module-matched (light/dark earthy tone by the module beneath it)
+      function buildPot(out, potR, potH, matrix, gridSize, offset) {
+        const tone = (x, z, pair) => { const col = Math.round(x + offset), row = Math.round(z + offset); const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize; return onTile ? (matrix[row][col] ? pair.d : pair.l) : pair.l }
+        for (let ly = 0; ly < potH; ly++) {
+          const rOut = potR * (0.7 + 0.3 * ly / (potH - 1)), rIn = rOut - 1.6, rim = ly === potH - 1, m = Math.ceil(potR)
+          for (let x = -m; x <= m; x++) for (let z = -m; z <= m; z++) { const d = Math.hypot(x, z); if (d <= rOut && d >= rIn) out.push({ x, y: ly, z, color: tone(x, z, rim ? RIM : POT) }) }
+        }
+        const mf = Math.ceil(potR), soilTop = potH - 2
+        for (let ly = soilTop; ly >= Math.max(0, soilTop - 2); ly--) { const rFill = potR * (0.7 + 0.3 * ly / (potH - 1)) - 1.1; for (let x = -mf; x <= mf; x++) for (let z = -mf; z <= mf; z++) if (Math.hypot(x, z) <= rFill) out.push({ x, y: ly, z, color: SOIL_FLAT }) }
+      }
+      // push a stem/leaf cell: on-tile cells are collected (coloured by their module later for cohesion);
+      // off-tile cells keep a fixed green so a leaf that just clears the square edge still reads as a leaf.
+      function pushG(onOut, offOut, col, row, H, mid, gridSize, offset) {
+        const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
+        if (onTile) onOut.push({ col, row, H, mid })
+        else offOut.push({ x: col - offset, y: H, z: row - offset, color: mid ? LMID_L : LL })
+      }
+      // a TERETE leaf: a thin round pencil rising out + up from a stem node, with a gentle tip droop.
+      // grid-aligned + height-only — the 3D pencil is pure per-cell height; thickness is a ~1-cell tube.
+      function buildLeaf(onOut, offOut, leaf, gridSize, offset) {
+        const { nx, nz, ny, az, pitch, len } = leaf
+        const ca = Math.cos(az), sa = Math.sin(az), ch = Math.cos(pitch), sh = Math.sin(pitch)
+        const px = -sa, pz = ca   // horizontal perpendicular → round cross-section
+        const steps = Math.ceil(len) + 2
+        for (let s = 0; s <= steps; s++) {
+          const t = s / steps, r = len * t
+          const droop = 0.16 * len * t * t                          // gentler curve — leaves stay suberect, not fountaining
+          const cx = nx + ca * ch * r, cz = nz + sa * ch * r, cy = ny + sh * r - droop
+          for (const dw of [-0.42, 0.42]) {                         // slim ~1-cell terete pencil (was a fat 3-wide tube)
+            const col = Math.round(cx + px * dw + offset), row = Math.round(cz + pz * dw + offset)
+            pushG(onOut, offOut, col, row, Math.max(0.5, cy), Math.abs(dw) < 0.3, gridSize, offset)
+          }
+        }
+        return { tx: nx + ca * ch * len, tz: nz + sa * ch * len, tipH: ny + sh * len - 0.22 * len }
+      }
+      // the signature Miss Joaquim FACE, read TOP-DOWN, drawn to the anatomy study (orchid-anatomy-study.html).
+      // delta is the angle off the LIP/front (delta=0 → straight toward the lip; delta=±π → the dorsal sepal at the back).
+      //   • DISK: a yellow callus core ringed by fiery orange, flecked violet (the red-purple spotting over the orange)
+      //   • LIP: a broad TRILOBED fan — the mid-lobe (epichile) flares forward, its edge SCALLOPED into ~4 lobes;
+      //     two small side lobes cup up beside the throat
+      //   • PETALS + DORSAL SEPAL: rosy-violet, the back/upper tepals (petals twisted → backs face front)
+      //   • LATERAL SEPALS: pale-mauve, the two lower-side wings
+      // Every cell is module-matched (light/dark tone of its part's hue) → luminance-correct everywhere → decode-safe.
+      // The face is built in its own 2D plane (u across, v up-the-face) then mapped onto a TILTED plane that FACES
+      // OUTWARD (azimuth faceAz) and slightly up (elevation faceTilt) — like the real plant, not flat to the sky.
+      // Resupinate: the lip is at the BOTTOM of the face (v<0), the dorsal sepal at the top (v>0).
+      function buildFlower(out, fx, fz, fy, R, faceAz, faceTilt, matrix, gridSize, offset) {
+        const az = faceAz, el = faceTilt
+        // in-plane axes: u = horizontal across the face, v = up the face; n = the face normal (outward+up)
+        const ux = -Math.sin(az), uz = Math.cos(az)
+        const vx = -Math.sin(el) * Math.cos(az), vy = Math.cos(el), vz = -Math.sin(el) * Math.sin(az)
+        const nx = Math.cos(el) * Math.cos(az), ny = Math.sin(el), nz = Math.cos(el) * Math.sin(az)
+        const m = Math.ceil(R * 2.1)
+        for (let iu = -m; iu <= m; iu++) for (let iv = -m; iv <= m; iv++) {
+          const d = Math.hypot(iu, iv)
+          // delta measured from the lip (straight down the face): 0 → lip, ±π → dorsal sepal
+          let delta = Math.atan2(iv, iu) + Math.PI / 2
+          delta = Math.atan2(Math.sin(delta), Math.cos(delta))
+          const ad = Math.abs(delta)
+          let part = null, lift = 0
+          if (d < R * 0.58) {
+            // the eye: yellow callus core → fiery orange ring, flecked violet (dark-purple spotting) on a checker
+            const fleck = d > R * 0.30 && ((Math.abs(iu) + Math.abs(iv)) % 2 === 0)
+            part = d < R * 0.26 ? GOLD : (fleck ? LIP : THROAT); lift = 1.6
+          } else if (ad < 1.15) {
+            // LIP fan — scalloped edge: the reach undulates with angle so the silhouette reads as ~4 lobes (epichile)
+            const lipReach = R * (1.60 + 0.42 * Math.cos(4.2 * delta))
+            if (d < lipReach) { part = LIP; lift = 0.7 }
+          } else if (ad < 1.85) {
+            if (d < R * 1.18) { part = SEP; lift = 0.85 }            // lateral sepals — the two lower-side wings (pale mauve)
+          } else {
+            // petals + dorsal sepal (rosy-violet) — gently scalloped so they read as distinct tepals not one disc
+            const tepReach = R * (1.16 + 0.16 * Math.cos(3.0 * delta))
+            if (d < tepReach) { part = TEP; lift = 1.05 }
+          }
+          if (!part) continue
+          // map face-coords (iu,iv) + a little relief along the normal onto the tilted plane in 3D
+          const px = fx + iu * ux + iv * vx + lift * nx
+          const py = fy + iv * vy + lift * ny
+          const pzz = fz + iu * uz + iv * vz + lift * nz
+          const col = Math.round(px + offset), row = Math.round(pzz + offset)
+          const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
+          const dark = onTile ? matrix[row][col] : false
+          out.push({ x: col - offset, y: Math.max(0.5, py), z: row - offset, color: dark ? part.d : part.l })
+        }
+      }
+
+      function build(content) {
+        const matrix = qrMatrixSafe(content, 'M', 9, ORCH_DEAD)
+        const gridSize = matrix.length, offset = (gridSize - 1) / 2, sc = gridSize / 33
+        const groundCells = []
+        for (let row = 0; row < gridSize; row++) for (let col = 0; col < gridSize; col++)
+          groundCells.push({ x: col - offset, y: 0, z: row - offset, color: matrix[row][col] ? FLOOR_DARK_C : CREAM_C })
+        // per-URL seeded RNG (FNV hash of the matrix → LCG) so every code is a genuinely different vine
+        let hsh = 2166136261 >>> 0
+        for (let r = 0; r < gridSize; r++) for (let c = 0; c < gridSize; c++) { hsh ^= matrix[r][c] ? 1 : 0; hsh = (hsh * 16777619) >>> 0 }
+        let rs = hsh || 1; const rnd = () => { rs = (rs * 1664525 + 1013904223) >>> 0; return rs / 4294967296 }
+
+        const S = gridSize * 0.5 - 0.6
+        const potR = 6.3 * sc, potH = Math.max(4, Math.round(9 * sc))
+        const potCells = []; buildPot(potCells, potR, potH, matrix, gridSize, offset)
+
+        // central monopodial climbing stem: a SLENDER cane (real stem is ~5mm on a 2m creeper) that leans/scrambles as it rises
+        const stemTop = potH + (28 + rnd() * 8) * sc
+        const stemAz = rnd() * Math.PI * 2, lean = (2.4 + rnd() * 1.8) * sc
+        const stemPath = t => [Math.cos(stemAz) * lean * t * t, potH + (stemTop - potH) * t, Math.sin(stemAz) * lean * t * t]
+        const onLeaf = [], overhang = []
+        const stemR = Math.max(0.55, 0.6 * sc)                        // thin cane, not a fat column
+        const sSteps = Math.ceil(stemTop - potH) + 1
+        for (let s = 0; s <= sSteps; s++) {
+          const [bx, by, bz] = stemPath(s / sSteps), m = Math.ceil(stemR)
+          for (let dx = -m; dx <= m; dx++) for (let dz = -m; dz <= m; dz++) {
+            if (Math.hypot(dx, dz) > stemR) continue
+            const col = Math.round(bx + dx + offset), row = Math.round(bz + dz + offset)
+            const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
+            if (onTile) onLeaf.push({ col, row, H: by, stem: true })
+            else overhang.push({ x: col - offset, y: by, z: row - offset, color: STK_L })
+          }
+        }
+
+        // alternating terete leaves up the stem (golden-angle spiral → distinct, never bunched). long thin pencils,
+        // ~40:1 in life — here long enough to clearly read as terete quills, slim enough not to smother the code
+        const NL = 10 + Math.floor(rnd() * 4)
+        const GOLDEN = 2.39996323, baseAz = rnd() * Math.PI * 2
+        const tips = []
+        for (let k = 0; k < NL; k++) {
+          const tt = 0.10 + 0.84 * (NL > 1 ? k / (NL - 1) : 0)
+          const [bx, by, bz] = stemPath(tt)
+          const laz = baseAz + k * GOLDEN
+          const pitch = 0.50 + rnd() * 0.30                       // ~29–46° up — suberect, not steep
+          let len = (11 + rnd() * 4) * sc
+          const ch = Math.cos(pitch)
+          // fit-in-square: shrink len so the tip stays inside the inscribed square (no clipping)
+          const tipX = bx + Math.cos(laz) * ch * len, tipZ = bz + Math.sin(laz) * ch * len
+          const over = Math.max(Math.abs(tipX), Math.abs(tipZ)) / S
+          if (over > 1) len /= over
+          tips.push(buildLeaf(onLeaf, overhang, { nx: bx, nz: bz, ny: by, az: laz, pitch, len }, gridSize, offset))
+        }
+
+        // colour every on-tile stem/leaf cell by its module → cohesive QR-matched body, no botanical-vs-code seam
+        const matched = []
+        for (const v of onLeaf) {
+          const dark = matrix[v.row][v.col]
+          const color = v.stem ? (dark ? STK_D : STK_L) : (v.mid ? (dark ? LMID_D : LMID_L) : (dark ? LD : LL))
+          matched.push({ x: v.col - offset, y: v.H, z: v.row - offset, color })
+        }
+
+        // ONE APICAL RACEME (the real habit): an axillary spike near the growing tip carries a CLUSTER of
+        // outward-facing flowers + a couple of buds toward the tip — not blooms scattered over the plant.
+        // Blooms are module-matched so the cluster decodes anywhere; it only has to dodge the finder / timing /
+        // alignment patterns (a nudge inward along the spike clears them).
+        const solid = []
+        const R = 2.5 * sc                                    // fan lip + orange eye need room; module-matched so decode is unaffected
+        // structural-pattern guards (a flower's footprint must not touch these)
+        const fc = [[3, 3], [gridSize - 4, 3], [3, gridSize - 4]]
+        const footCells = Math.ceil(R * 1.7) + 2
+        const nearFinder = (col, row) => fc.some(([fcx, fcy]) => Math.max(Math.abs(col - fcx), Math.abs(row - fcy)) < footCells + 4)
+        const ac = alignCentres(gridSize)
+        const nearAlign = (col, row) => ac.some(([acx, acy]) => Math.max(Math.abs(col - acx), Math.abs(row - acy)) < footCells)
+        const nearTiming = (col, row) => Math.abs(row - 6) < footCells || Math.abs(col - 6) < footCells
+        const blocked = (fx, fz) => {                         // flower centre at offset (fx,fz): off-tile?, on a pattern?
+          const col = Math.round(fx + offset), row = Math.round(fz + offset)
+          if (Math.abs(fx) > S - R * 1.9 || Math.abs(fz) > S - R * 1.9) return true   // would overhang the square
+          return nearFinder(col, row) || nearAlign(col, row) || nearTiming(col, row)
+        }
+        // each flower FACES OUTWARD and slightly up (like the real plant) — not flat to the sky
+        const FACE_TILT = 0.52                                // ≈30° above horizontal: mostly front-facing, a touch up
+        // build ONE apical raceme from a stem node (apexT) heading out in spikeAz: a cluster of outward-facing flowers + buds
+        function makeSpike(apexT, spikeAz, nf) {
+          const [aX, aY, aZ] = stemPath(apexT)
+          const baseR = 3.2 * sc, step = R * 1.85             // spacing along the spike (loose, slightly-overlapping cluster)
+          const placed = []
+          for (let k = 0; k < nf; k++) {
+            let rad = baseR + k * step
+            let fx, fz, ok = false
+            for (let tries = 0; tries < 14; tries++) {        // nudge inward until the footprint clears square + patterns
+              fx = aX + Math.cos(spikeAz) * rad
+              fz = aZ + Math.sin(spikeAz) * rad
+              if (!blocked(fx, fz)) { ok = true; break }
+              rad -= 0.6 * sc
+              if (rad < baseR * 0.5) break
+            }
+            if (!ok) continue
+            const faceAz = Math.atan2(fz - aZ, fx - aX) + (rnd() - 0.5) * 0.5   // face OUT from the spike base, slight jitter
+            const fy = aY + (2.0 + k * 0.8) * sc                                // rise along the arcing spike
+            buildFlower(solid, fx, fz, fy, R, faceAz, FACE_TILT, matrix, gridSize, offset)
+            placed.push({ fx, fz, fy, rad })
+            // pedicel: a short green stalk back to the spike axis so the bloom reads as attached
+            const psteps = Math.max(3, Math.round(step * 0.6))
+            for (let i = 1; i <= psteps; i++) {
+              const t = i / psteps
+              const sx = fx * (1 - t) + aX * t, sz = fz * (1 - t) + aZ * t, sy = fy - t * (fy - aY) * 0.7
+              const col = Math.round(sx + offset), row = Math.round(sz + offset)
+              const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
+              if (onTile) matched.push({ x: col - offset, y: sy, z: row - offset, color: matrix[row][col] ? STK_D : STK_L })
+              else overhang.push({ x: col - offset, y: sy, z: row - offset, color: STK_L })
+            }
+          }
+          if (!placed.length) return
+          // the SPIKE scape — a thin stalk from the node out to the furthest flower
+          const far = placed.reduce((a, b) => (b.rad > a.rad ? b : a))
+          const scSteps = Math.max(4, Math.round(far.rad))
+          for (let i = 0; i <= scSteps; i++) {
+            const t = i / scSteps
+            const sx = aX + (far.fx - aX) * t, sz = aZ + (far.fz - aZ) * t, sy = aY + (far.fy - aY) * t * 0.6
+            const col = Math.round(sx + offset), row = Math.round(sz + offset)
+            const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
+            if (onTile) matched.push({ x: col - offset, y: sy, z: row - offset, color: matrix[row][col] ? STK_D : STK_L })
+            else overhang.push({ x: col - offset, y: sy, z: row - offset, color: STK_L })
+          }
+          // 1–2 unopened BUDS toward the tip (pale-mauve nubs), just past the furthest flower
+          const nBud = 1 + Math.floor(rnd() * 2)
+          for (let b = 0; b < nBud; b++) {
+            const br = far.rad + (1.4 + b * 1.3) * sc
+            const bx = aX + Math.cos(spikeAz) * br, bz = aZ + Math.sin(spikeAz) * br
+            if (Math.abs(bx) > S - 1 || Math.abs(bz) > S - 1) continue
+            const by = far.fy + (0.8 + b * 0.6) * sc, brad = Math.max(1, Math.round(0.9 * sc))
+            for (let dx = -brad; dx <= brad; dx++) for (let dz = -brad; dz <= brad; dz++) {
+              if (Math.hypot(dx, dz) > brad) continue
+              const col = Math.round(bx + dx + offset), row = Math.round(bz + dz + offset)
+              const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
+              const dark = onTile ? matrix[row][col] : false
+              solid.push({ x: col - offset, y: by, z: row - offset, color: dark ? SEP.d : SEP.l })
+            }
+          }
+        }
+        // MULTIPLE spikes (the plant carries more than one orchid): 1–2 racemes from different upper nodes, facing apart
+        const nSpikes = 1 + (rnd() < 0.7 ? 1 : 0)
+        const spikeBase = stemAz + (rnd() - 0.5) * 1.0
+        for (let s = 0; s < nSpikes; s++) {
+          const apexT = 0.86 - s * 0.16                       // upper node, then a lower one
+          const az = spikeBase + (s === 0 ? 0 : (rnd() < 0.5 ? 1 : -1) * (1.8 + rnd() * 1.2))   // spikes splay apart
+          const nf = 2 + Math.floor(rnd() * 2)                // 2–3 flowers per spike
+          makeSpike(apexT, az, nf)
+        }
+
+        let maxR = 0, maxY = 0
+        for (const v of onLeaf) { const r = Math.hypot(v.col - offset, v.row - offset); if (r > maxR) maxR = r; if (v.H > maxY) maxY = v.H }
+        for (const c of solid.concat(overhang)) { const r = Math.hypot(c.x, c.z); if (r > maxR) maxR = r; if (c.y > maxY) maxY = c.y }
+        if (potR > maxR) maxR = potR
+        return {
+          groups: [
+            { cells: groundCells, fade: false, sway: false },
+            { cells: potCells, fade: false, sway: false },
+            { cells: matched, fade: false, sway: true },     // stem + terete leaves + pedicels (the QR-matched body)
+            { cells: overhang, fade: false, sway: true },    // off-tile leaf/stem peeks — solid green, never faded (no-fade rule)
+            { cells: solid, fade: false, sway: true }         // the signature blooms
+          ],
+          view: { span: gridSize, maxR, maxY, spanK: 0.6, radK: 0.84, heightK: 0.6, focusK: 0.5 }
+        }
+      }
+      return { build }
+    })()
+
+    // ======================================================================
+    // PITCHER — Nepenthes rafflesiana (v1). Potted plant: terracotta pot + uniform
+    // soil, a rosette of green strappy leaves carrying the QR canopy, and 1-2
+    // LEVITATING pitchers of DIFFERENT sizes hung from tendrils off the leaf tips
+    // (they float, never touch soil, never intersect a leaf — de-intersection
+    // carves any overlap). Tall red funnel, red-striped peristome + neck + lid +
+    // wings, cream body RED-mottled. Every cell coloured by its module (tops = real
+    // QR, occluded = the same mottle in an occluded palette = cohesive, no seam).
+    // ======================================================================
+    const PITCHER = (() => {
+      const C = h => new THREE.Color(h)
+      const CREAM_C = C('#f1ece2'), FLOOR_DARK_C = C('#566159')
+      const POT_BODY = C('#c0744d'), POT_RIM = C('#d98f63'), POT_SOIL = C('#4f3b2a')
+      // GREENER variant: hue shifted toward a richer glossy green (less cream/sage), luminance held so decode margin survives
+      const LD = { mid: C('#234c26'), blade: C('#2e6831'), vein: C('#295c2b'), margin: C('#224a25') }
+      const LL = { mid: C('#aece90'), blade: C('#b9dba0'), vein: C('#cfe6b6'), margin: C('#a8ca87') }
+      const LOD = { mid: C('#29512a'), blade: C('#356235'), vein: C('#305b30'), margin: C('#294f29') }
+      const LOL = { mid: C('#9fc285'), blade: C('#aece90'), vein: C('#c2dcab'), margin: C('#98bb7e') }
+      const LN  = { mid: C('#356a37'), blade: C('#467d40'), vein: C('#cfe6b6'), margin: C('#224a25') }
+      const STK_D = C('#3f5a2c'), STK_L = C('#86a064')
+      const PB_L = C('#e7ddbe'), PB_D = C('#6e2a30'), PB_OL = C('#d6c2a0'), PB_OD = C('#7c3038')
+      const PERI_L = C('#edd2bc'), PERI_D = C('#7e2330')
+      const LID_L = C('#d8c4a0'), LID_D = C('#5a2330')   // cream + dark red → reads as PITCHER, not a green leaf
+      const WING_L = C('#dacca6'), WING_D = C('#6d3a2c'), WING_OL = C('#c9b893'), WING_OD = C('#6f4233')
+      const THROAT_C = C('#39141a')   // dark recessed mouth interior — reads as an open trap, not a capped top
+      const PIT_DEAD = new Set([15, 19, 23])
+
+      const frac = x => x - Math.floor(x)
+      function lance(u, v) { if (v < 0 || v > 1) return false; const w = Math.pow(Math.sin(Math.PI * v), 0.6) * (1 - 0.30 * v) * 0.78; return Math.abs(u) <= w }
+      function leafZone(u, v, edge) { if (edge) return 'margin'; const t = Math.abs(u); if (t < 0.12) return 'mid'; if (frac(v * 6 - t * 2) < 0.10) return 'vein'; return 'blade' }
+      function pushCell(onOut, offOut, col, row, H, offset, zone, gridSize) {
+        const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
+        if (onTile) onOut.push({ col, row, H, zone })
+        else offOut.push({ x: col - offset, y: H, z: row - offset, color: LN[zone] })
+      }
+      function pushStalk(onOut, offOut, wx, wy, wz, matrix, offset, gridSize) {
+        const col = Math.round(wx + offset), row = Math.round(wz + offset)
+        const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
+        if (onTile) onOut.push({ col, row, H: wy, color: matrix[row][col] ? STK_D : STK_L, fixed: true })
+        else offOut.push({ x: col - offset, y: wy, z: row - offset, color: STK_L })
+      }
+      function buildLeaf(onOut, offOut, leaf, matrix, offset, gridSize) {
+        const { cx, cz, az, size, baseH, rise, droop } = leaf
+        const ca = Math.cos(az), sa = Math.sin(az)
+        const du = 1 / size, dv = 1 / (size * 2.2)
+        const ext = Math.ceil(size * 2.4)
+        const ccol = Math.round(cx + offset), crow = Math.round(cz + offset)
+        const sSteps = Math.ceil(Math.hypot(cx, cz) + baseH) + 1
+        for (let s = 0; s <= sSteps; s++) { const f = s / sSteps; pushStalk(onOut, offOut, cx * f, baseH * f, cz * f, matrix, offset, gridSize) }
+        for (let col = ccol - ext; col <= ccol + ext; col++) for (let row = crow - ext; row <= crow + ext; row++) {
+          const dx = (col - offset) - cx, dz = (row - offset) - cz
+          const lz = dx * ca + dz * sa, lx = -dx * sa + dz * ca
+          const u = lx / size, v = lz / (size * 2.2)
+          if (!lance(u, v)) continue
+          const edge = !lance(u + du, v) || !lance(u - du, v) || !lance(u, v + dv) || !lance(u, v - dv)
+          const zone = leafZone(u, v, edge)
+          const H = baseH + v * rise - droop * v * v
+          pushCell(onOut, offOut, col, row, Math.max(0.5, H), offset, zone, gridSize)
+        }
+        // leaf tip (far end) — where a pitcher tendril attaches
+        return { tx: cx + ca * size * 1.7, tz: cz + sa * size * 1.7, tipH: baseH + rise - droop }
+      }
+      function buildPot(out, potR, potH) {
+        for (let ly = 0; ly < potH; ly++) {
+          const rOut = potR * (0.7 + 0.3 * ly / (potH - 1)), rIn = rOut - 1.6, rim = ly === potH - 1, m = Math.ceil(potR)
+          for (let x = -m; x <= m; x++) for (let z = -m; z <= m; z++) { const d = Math.hypot(x, z); if (d <= rOut && d >= rIn) out.push({ x, y: ly, z, color: rim ? POT_RIM : POT_BODY }) }
+        }
+        const mf = Math.ceil(potR), soilTop = potH - 2
+        for (let ly = soilTop; ly >= Math.max(0, soilTop - 2); ly--) { const rFill = potR * (0.7 + 0.3 * ly / (potH - 1)) - 1.1; for (let x = -mf; x <= mf; x++) for (let z = -mf; z <= mf; z++) if (Math.hypot(x, z) <= rFill) out.push({ x, y: ly, z, color: POT_SOIL }) }
+      }
+      // Nepenthes rafflesiana LOWER pitcher: bulbous belly widest in the lower third (f≈0.32),
+      // tapering to a constricted-but-open mouth. base rounds in, mouth stays ~0.6·pr.
+      // taller, slimmer rafflesiana profile (~2:1 tall:wide) — gently bulbous low, tapering to the capped mouth
+      function bodyR(pr, f) { return pr * (0.34 + 0.42 * Math.sin(Math.PI * Math.pow(f, 0.58)) + 0.20 * f) }
+      function leafClear(leafMap, col, row, y) { const a = leafMap.get(col + ',' + row); if (!a) return true; for (const lh of a) if (Math.abs(lh - y) < 2.6) return false; return true }
+      // levitating mouth-up pitcher hung at baseY: bulbous cup → rolled peristome rim (tilted, low front /
+      // raised rear neck) → an oval LID roofing the mouth from the back → two fringed front wings.
+      // de-intersection carves any cell that would pass through a leaf.
+      function buildPitcher(matchedOut, solidOut, leafMap, px, pz, baseY, ph, pr, faceAz, matrix, offset, gridSize) {
+        const cells = [], ca = Math.cos(faceAz), sa = Math.sin(faceAz)
+        // pitcher is SOLID — it does NOT yield to leaves. instead the LEAVES are carved around it afterwards (see the
+        // leaf-carve post-pass), so the trap always reads as a solid object and no leaf ever slices through it.
+        const put = (col, row, y, kind) => { cells.push({ col, row, y, kind }) }
+        // per-angle mouth height: front of the rim sits LOW, rear rises into the neck → mouth faces up-and-forward
+        const rimAt = (dx, dz, rr) => { const front = rr > 0.6 ? (dx * ca + dz * sa) / rr : 0; return ph - 1 - Math.round((front + 1) * 1.5) }
+        for (let ly = 0; ly < ph; ly++) {
+          const f = ly / Math.max(1, ph - 1), rr = bodyR(pr, f), m = Math.ceil(rr) + 1
+          // round the base in: a hemispherical floor on the lowest layers so the belly doesn't read as a flat disc
+          const shell = ly < 2 ? rr : 1.8
+          for (let dx = -m; dx <= m; dx++) for (let dz = -m; dz <= m; dz++) {
+            const d = Math.hypot(dx, dz); if (d > rr || d < rr - shell) continue
+            const rimTop = rimAt(dx, dz, rr)
+            if (ly > rimTop) continue
+            put(Math.round(px + offset + dx), Math.round(pz + offset + dz), baseY + ly, ly >= rimTop - 1 ? 'peri' : 'body')
+          }
+        }
+        const mouthR = bodyR(pr, 1)
+        const segs = Math.max(16, Math.round(mouthR * 6))
+        // THROAT — a recessed dark WELL several layers deep inside the rim → a clearly visible open mouth (not a capped top).
+        // only the top layer (rimTop-1) is visible from straight above, so deepening the well downward is decode-free.
+        { const mm = Math.ceil(mouthR)
+          for (let dx = -mm; dx <= mm; dx++) for (let dz = -mm; dz <= mm; dz++) {
+            if (Math.hypot(dx, dz) > mouthR - 0.5) continue
+            const rimTop = rimAt(dx, dz, mouthR)
+            for (let kk = 1; kk <= 4; kk++) put(Math.round(px + offset + dx), Math.round(pz + offset + dz), baseY + rimTop - kk, 'throat')
+          } }
+        // rolled peristome lip — a flared glossy ring just outside the cup at the mouth line
+        for (let i = 0; i < segs; i++) {
+          const a = (i / segs) * Math.PI * 2, dx = Math.cos(a) * (mouthR + 0.5), dz = Math.sin(a) * (mouthR + 0.5)
+          const rimTop = rimAt(dx, dz, mouthR)
+          put(Math.round(px + offset + dx), Math.round(pz + offset + dz), baseY + rimTop, 'peri')
+          put(Math.round(px + offset + dx), Math.round(pz + offset + dz), baseY + rimTop + 1, 'peri')
+        }
+        // taller rear NECK so the lid hinges well ABOVE the rim (clear air beneath it)
+        const neckH = 2 + Math.round(pr * 0.5)
+        for (let i = 0; i <= neckH; i++) for (let j = -1; j <= 1; j++)
+          put(Math.round(px + offset - ca * (mouthR - 0.2) - sa * j), Math.round(pz + offset - sa * (mouthR - 0.2) + ca * j), baseY + ph - 1 + i, 'peri')
+        // LID (operculum) — a distinct angled roof held HIGH above the open mouth (jaunty open-lid pose, gap beneath)
+        const hdx = -ca * (mouthR - 0.4), hdz = -sa * (mouthR - 0.4), hy = baseY + ph - 1 + neckH + 1
+        const lidLen = mouthR * 2.0, lidW = mouthR * 1.15
+        for (let a = 0; a <= lidLen; a += 0.5) for (let b = -lidW; b <= lidW; b += 0.5) {
+          const fa = a / lidLen, fb = b / Math.max(0.5, lidW)
+          if (fa * fa * 0.5 + fb * fb > 1) continue                  // teardrop oval, broad at the hinge
+          const dx = hdx + ca * a - sa * b, dz = hdz + sa * a + ca * b
+          const y = hy + 0.4 * a                                     // steep back-tilt → a clearly raised roof, mouth open below
+          put(Math.round(px + offset + dx), Math.round(pz + offset + dz), Math.round(y), 'lid')
+        }
+        // two fringed front WINGS running down the belly (flanking the front, distinct frills)
+        for (let ly = 1; ly < ph - 1; ly++) {
+          const rad = bodyR(pr, ly / (ph - 1)) + 0.3, comb = ly % 2 === 0
+          for (const side of [-1, 1]) {
+            put(Math.round(px + offset + ca * rad - sa * side * 1.5), Math.round(pz + offset + sa * rad + ca * side * 1.5), baseY + ly, 'wing')
+            if (comb) put(Math.round(px + offset + ca * (rad + 0.8) - sa * side * 1.5), Math.round(pz + offset + sa * (rad + 0.8) + ca * side * 1.5), baseY + ly, 'wing')
+          }
+        }
+        const top = new Map()
+        for (const c of cells) { const k = c.col + ',' + c.row; const cur = top.get(k); if (!cur || c.y > cur.y) top.set(k, c) }
+        for (const c of cells) {
+          const onTile = c.col >= 0 && c.row >= 0 && c.col < gridSize && c.row < gridSize
+          const dark = onTile ? matrix[c.row][c.col] : false
+          if (top.get(c.col + ',' + c.row) === c && onTile) {
+            const pr2 = c.kind === 'throat' ? [THROAT_C, THROAT_C] : c.kind === 'peri' ? [PERI_L, PERI_D] : c.kind === 'lid' ? [LID_L, LID_D] : c.kind === 'wing' ? [WING_L, WING_D] : [PB_L, PB_D]
+            matchedOut.push({ x: c.col - offset, y: c.y, z: c.row - offset, color: dark ? pr2[1] : pr2[0] })
+          } else {
+            const op = c.kind === 'throat' ? [THROAT_C, THROAT_C] : c.kind === 'peri' ? [PERI_L, PERI_D] : c.kind === 'lid' ? [LID_L, LID_D] : c.kind === 'wing' ? [WING_OL, WING_OD] : [PB_OL, PB_OD]
+            solidOut.push({ x: c.col - offset, y: c.y, z: c.row - offset, color: onTile ? (dark ? op[1] : op[0]) : PB_OD })
+          }
+        }
+      }
+      // green tendril hanging the pitcher off a leaf tip (gentle curl). the TOP third is never culled so the
+      // stalk visibly emerges from under the leaf tip = the pitcher reads as attached, not levitating.
+      function buildTendril(matchedOut, solidOut, leafMap, ax, az0, ay, bx, bz, by, matrix, offset, gridSize) {
+        const n = Math.max(4, Math.ceil(Math.hypot(bx - ax, by - ay, bz - az0)) * 2)
+        const seen = new Set()
+        for (let i = 0; i <= n; i++) {
+          const t = i / n, curl = Math.sin(t * Math.PI) * 1.2
+          const x = ax + (bx - ax) * t - curl, y = ay + (by - ay) * t, z = az0 + (bz - az0) * t + curl
+          const col = Math.round(x + offset), row = Math.round(z + offset), yr = Math.round(y)
+          if (t > 0.32 && !leafClear(leafMap, col, row, y)) continue   // keep the attachment run; cull only lower stretches that pierce a leaf
+          // 2-cell-thick stalk (the cell + a neighbour toward the tip-curl side) so the connector reads at this scale
+          for (const [oc, orr] of [[0, 0], [t < 0.5 ? 1 : 0, t < 0.5 ? 0 : 1]]) {
+            const cc = col + oc, rr2 = row + orr, key = cc + ',' + rr2 + ',' + yr
+            if (seen.has(key)) continue; seen.add(key)
+            const onTile = cc >= 0 && rr2 >= 0 && cc < gridSize && rr2 < gridSize
+            solidOut.push({ x: cc - offset, y: yr, z: rr2 - offset, color: onTile ? (matrix[rr2][cc] ? STK_D : STK_L) : STK_L })
+          }
+        }
+      }
+      function build(content) {
+        const matrix = qrMatrixSafe(content, 'M', 9, PIT_DEAD)
+        const gridSize = matrix.length, offset = (gridSize - 1) / 2, sc = gridSize / 33
+        const groundCells = []
+        for (let row = 0; row < gridSize; row++) for (let col = 0; col < gridSize; col++)
+          groundCells.push({ x: col - offset, y: 0, z: row - offset, color: matrix[row][col] ? FLOOR_DARK_C : CREAM_C })
+        let hsh = 2166136261 >>> 0
+        for (let r = 0; r < gridSize; r++) for (let c = 0; c < gridSize; c++) { hsh ^= matrix[r][c] ? 1 : 0; hsh = (hsh * 16777619) >>> 0 }
+        let rs = hsh || 1; const rnd = () => { rs = (rs * 1664525 + 1013904223) >>> 0; return rs / 4294967296 }
+        const S = gridSize * 0.5 - 0.3
+        const potR = 7.0 * sc, potH = Math.max(4, Math.round(10 * sc))   // adequately sized — a touch under frangipani's 7.5/11
+        const potCells = []; buildPot(potCells, potR, potH)
+        // rosette of strappy green leaves: few, distinct (golden angle), out + gently up, fit the square
+        const leaves = [], overhang = [], tips = []
+        const NL = 6 + Math.floor(rnd() * 2)
+        const GOLDEN = 2.39996323, MAX_TILT = 1.7, climbMul = 1.0 + rnd() * 0.4
+        let az = rnd() * Math.PI * 2
+        const defs = []
+        for (let k = 0; k < NL; k++) {
+          az += GOLDEN + (rnd() - 0.5) * 0.4
+          const t = NL > 1 ? k / (NL - 1) : 0
+          defs.push({ az, rc: (1.6 + rnd() * 1.4) * sc, climbH: potH + (5 + t * 16 * climbMul + (rnd() - 0.5) * 2) * sc, size: (9 + t * 2 + rnd() * 2) * sc, rise: (8 + rnd() * 3) * sc, droop: (4 + rnd() * 2) * sc })
+        }
+        for (const d of defs) {
+          const cA = Math.abs(Math.cos(d.az)), sA = Math.abs(Math.sin(d.az))
+          const reach = d.rc + d.size * 2.2, lat = d.size * 0.8
+          const f = Math.min(1.5, S / Math.max(reach * cA + lat * sA, reach * sA + lat * cA))
+          const rc = d.rc * f, size = d.size * f
+          tips.push(buildLeaf(leaves, overhang, { cx: Math.cos(d.az) * rc, cz: Math.sin(d.az) * rc, az: d.az, size, baseH: Math.max(d.climbH, potH + rc / MAX_TILT), rise: d.rise, droop: d.droop }, matrix, offset, gridSize))
+        }
+        const leafCells = [], leafMap = new Map()
+        const mapLeaf = (col, row, H) => { const k = col + ',' + row; (leafMap.get(k) || leafMap.set(k, []).get(k)).push(H) }
+        for (const v of leaves) {
+          const onTile = v.col >= 0 && v.row >= 0 && v.col < gridSize && v.row < gridSize
+          let color
+          if (v.fixed) color = v.color
+          else color = matrix[v.row][v.col] ? LD[v.zone] : LL[v.zone]
+          leafCells.push({ x: v.col - offset, y: v.H, z: v.row - offset, color })
+          mapLeaf(v.col, v.row, v.H)
+        }
+        // register the OFF-TILE overhang leaves too, so pitcher flaps de-intersect against the whole canopy (not just on-tile)
+        for (const v of overhang) mapLeaf(Math.round(v.x + offset), Math.round(v.z + offset), v.y)
+        const matched = [], solid = []
+        const floorY = potH + 2 * sc                     // never sink into the soil
+        // every leaf tip is a candidate, tallest first. the leaf-carve post-pass keeps pitchers solid through any leaf,
+        // so a pitcher only needs to hang below its tip, inside the tile, above the soil — no canopy gymnastics.
+        const allCand = tips.map((tp, i) => ({ tp, laz: defs[i].az, used: false })).sort((a, b) => b.tp.tipH - a.tp.tipH)
+        let placed = 0; const want = 3 + Math.floor(rnd() * 2)   // target 3-4
+        // hang one pitcher off candidate c if a cup of at least minPh fits; returns true on success.
+        const place = (c, minPh) => {
+          if (c.used) return false
+          const { tp, laz } = c
+          const pr0 = (2.8 + rnd() * 1.5) * sc
+          const foot = pr0 + 2.6 * sc                    // lateral half-footprint (body + lid + wings)
+          const rUse = Math.min(Math.hypot(tp.tx, tp.tz), S - foot)   // pull inward only enough to avoid overhang
+          const px = Math.cos(laz) * rUse, pz = Math.sin(laz) * rUse
+          const topExtra = 2.5 * sc + 0.93 * pr0         // neck + raised-lid rise above the cup top
+          const topCap = tp.tipH - 5 * sc                // hang below the parent tip
+          const phMax = topCap - floorY - topExtra
+          if (phMax < minPh) return false
+          const ph = Math.min(Math.round((13 + rnd() * 4) * sc), Math.floor(phMax))
+          const pr = Math.min(pr0, 0.30 * ph)            // OBLONG (~2:1): clamp width to (possibly capped) height
+          const baseY = Math.max(floorY, topCap - ph - topExtra)
+          buildPitcher(matched, solid, leafMap, px, pz, baseY, ph, pr, laz, matrix, offset, gridSize)
+          buildTendril(matched, solid, leafMap, tp.tx, tp.tz, tp.tipH, px - Math.cos(laz) * bodyR(pr, 1), pz - Math.sin(laz) * bodyR(pr, 1), baseY + ph, matrix, offset, gridSize)
+          c.used = true; placed++; return true
+        }
+        // pass 1 — up to `want` nicely-sized pitchers off the outer tips
+        for (const c of allCand) { if (placed >= want) break; if (Math.hypot(c.tp.tx, c.tp.tz) > S * 0.34) place(c, 7 * sc) }
+        // GUARANTEE at least 2 — relax the height (then position) until two are hung
+        for (const c of allCand) { if (placed >= 2) break; if (Math.hypot(c.tp.tx, c.tp.tz) > S * 0.30) place(c, 4 * sc) }
+        for (const c of allCand) { if (placed >= 2) break; place(c, 2 * sc) }
+        // LEAF-CARVE post-pass — the leaves de-intersect against the pitchers: any leaf cell sitting inside a pitcher's
+        // vertical column (within its occupied y-range) is removed, so the solid pitcher reads in FRONT of the foliage
+        // and no leaf slices through it. carve a 1-cell margin so the leaf stops just shy of the pitcher surface.
+        const pitCol = new Map()   // "col,row" -> [minY, maxY] occupied by any pitcher cell
+        for (const c of matched.concat(solid)) {
+          const k = Math.round(c.x + offset) + ',' + Math.round(c.z + offset), r = pitCol.get(k)
+          if (!r) pitCol.set(k, [c.y, c.y]); else { if (c.y < r[0]) r[0] = c.y; if (c.y > r[1]) r[1] = c.y }
+        }
+        const insidePitcher = (col, row, y) => { const r = pitCol.get(col + ',' + row); return r && y >= r[0] - 1 && y <= r[1] + 1 }
+        const leafKept = leafCells.filter(c => !insidePitcher(Math.round(c.x + offset), Math.round(c.z + offset), c.y))
+        const overhangKept = overhang.filter(c => !insidePitcher(Math.round(c.x + offset), Math.round(c.z + offset), c.y))
+        let maxR = 0, maxY = 0
+        for (const v of leaves) { const r = Math.hypot(v.col - offset, v.row - offset); if (r > maxR) maxR = r; if (v.H > maxY) maxY = v.H }
+        for (const c of matched.concat(solid)) { const r = Math.hypot(c.x, c.z); if (r > maxR) maxR = r; if (c.y > maxY) maxY = c.y }
+        if (potR > maxR) maxR = potR
+        return {
+          groups: [
+            { cells: groundCells, fade: false, sway: false },
+            { cells: potCells, fade: false, sway: false },
+            { cells: solid, fade: false, sway: true },    // pitchers + tendrils sway WITH the plant (same pot-centre pivot → attachment holds)
+            { cells: matched, fade: false, sway: true },
+            { cells: leafKept, fade: false, sway: true },
+            { cells: overhangKept, fade: true, sway: true }
+          ],
+          view: { span: gridSize, maxR, maxY, spanK: 0.6, radK: 0.84, heightK: 0.66, focusK: 0.46 }
+        }
+      }
+      return { build }
+    })()
+
+    // ======================================================================
+    // HYDRANGEA — Hydrangea macrophylla (mophead). The plant's whole identity is a
+    // dense DOME of tiny florets (each = 4 roundish petal-like sepals), so the head
+    // maps beautifully to voxels: a hemisphere of cells where HUE carries the
+    // hydrangea (multi-toned blue/pink/purple florets, pH-driven) and LUMINANCE
+    // carries the QR (every cell module-matched). Broad opposite serrated ovate
+    // leaves below; the big matched canopy decodes like the caladium's.
+    // ======================================================================
+    const HYDRANGEA = (() => {
+      const C = h => new THREE.Color(h)
+      const CREAM_C = C('#f1ece2'), FLOOR_DARK_C = C('#566159')
+      const POT = { l: C('#e6c399'), d: C('#74502f') }, RIM = { l: C('#eccaa0'), d: C('#7e5a38') }
+      const SOIL_FLAT = C('#9c7547')                       // uniform soil (canopy covers it; verified decode-safe)
+      // leaf greens — module-matched, hugging the ground band (dark ≈88–98, light ≈205–215)
+      const LD = C('#3c6b3e'), LL = C('#bfdca4'), LMID_D = C('#46773f'), LMID_L = C('#cbe6ad')
+      const STK_D = C('#4c6733'), STK_L = C('#b9d69a')
+      // floret tints — each a luminance-safe {l,d} pair of one hue (light ≈205–215, dark ≈88–98)
+      const BLUE = [{ l: C('#bcd0f2'), d: C('#3a5c98') }, { l: C('#c6dbf5'), d: C('#44638f') }]
+      const PURPLE = [{ l: C('#d3c2ee'), d: C('#654f93') }, { l: C('#cdbbe8'), d: C('#5e4f8c') }]
+      const PINK = [{ l: C('#efc4dd'), d: C('#8a3f6a') }, { l: C('#f0bcd2'), d: C('#993e63') }]
+      const WHITE = [{ l: C('#e9e9f0'), d: C('#5e5e72') }]
+      const GREENT = { l: C('#d8e2c2'), d: C('#5f6b4a') }  // cream-green (florets opening / ageing)
+      const HYD_DEAD = new Set([15, 19, 23])
+      const CWS = ['mixed', 'blue', 'blue', 'pink', 'purple', 'white', 'mixed']   // weighted colourways
+
+      function hash2(a, b) { let h = (Math.imul(a + 9176, 73856093) ^ Math.imul(b + 4096, 19349663)) >>> 0; h ^= h >>> 13; h = Math.imul(h, 1274126177) >>> 0; return (h >>> 0) / 4294967296 }
+      function pickTint(cw, fcol, frow, gradT) {
+        const r = hash2(fcol, frow)
+        if (cw === 'blue') return r < 0.16 ? PURPLE[0] : (r < 0.6 ? BLUE[0] : BLUE[1])
+        if (cw === 'pink') return r < 0.16 ? PURPLE[0] : (r < 0.6 ? PINK[0] : PINK[1])
+        if (cw === 'purple') return r < 0.42 ? PURPLE[0] : (r < 0.6 ? PURPLE[1] : (r < 0.8 ? BLUE[0] : PINK[0]))
+        if (cw === 'white') return r < 0.12 ? GREENT : WHITE[0]
+        // mixed — the iconic blue→purple→pink gradient across the head, with per-floret jitter
+        const t = Math.min(1, Math.max(0, gradT + (r - 0.5) * 0.30))
+        if (t < 0.38) return r < 0.5 ? BLUE[0] : BLUE[1]
+        if (t < 0.62) return r < 0.5 ? PURPLE[0] : PURPLE[1]
+        return r < 0.5 ? PINK[0] : PINK[1]
+      }
+
+      function buildPot(out, potR, potH, matrix, gridSize, offset) {
+        const tone = (x, z, pair) => { const col = Math.round(x + offset), row = Math.round(z + offset); const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize; return onTile ? (matrix[row][col] ? pair.d : pair.l) : pair.l }
+        for (let ly = 0; ly < potH; ly++) {
+          const rOut = potR * (0.72 + 0.28 * ly / (potH - 1)), rIn = rOut - 1.6, rim = ly === potH - 1, m = Math.ceil(potR)
+          for (let x = -m; x <= m; x++) for (let z = -m; z <= m; z++) { const d = Math.hypot(x, z); if (d <= rOut && d >= rIn) out.push({ x, y: ly, z, color: tone(x, z, rim ? RIM : POT) }) }
+        }
+        const mf = Math.ceil(potR), soilTop = potH - 2
+        for (let ly = soilTop; ly >= Math.max(0, soilTop - 2); ly--) { const rFill = potR * (0.72 + 0.28 * ly / (potH - 1)) - 1.1; for (let x = -mf; x <= mf; x++) for (let z = -mf; z <= mf; z++) if (Math.hypot(x, z) <= rFill) out.push({ x, y: ly, z, color: SOIL_FLAT }) }
+      }
+      // a globose MOPHEAD built from discrete 4-SEPAL FLORETS. On a 3-cell lattice each floret is a centre EYE +
+      // a cross of 4 sepal cells; the 4 corners are recessed crevices so neighbouring florets read as separate
+      // units (not a smooth ball). One cell per column, module-matched: luminance carries the QR, hue carries the
+      // floret's pH tint; the whole floret shares one tint, the eye is a small green/cream centre.
+      function buildDome(out, cx, cz, baseY, domeR, domeH, cw, matrix, gridSize, offset) {
+        const m = Math.ceil(domeR), FS = 3
+        for (let dx = -m; dx <= m; dx++) for (let dz = -m; dz <= m; dz++) {
+          const r = Math.hypot(dx, dz)
+          if (r > domeR) continue
+          const col = Math.round(cx + dx + offset), row = Math.round(cz + dz + offset)
+          const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
+          const hfrac = Math.sqrt(Math.max(0, 1 - (r / domeR) * (r / domeR)))
+          // floret lattice on the absolute grid (stable, tiles across heads); role by offset from the floret centre
+          const fu = Math.round(col / FS) * FS, fv = Math.round(row / FS) * FS
+          const man = Math.abs(col - fu) + Math.abs(row - fv)
+          const role = man === 0 ? 'eye' : (man === 1 ? 'petal' : 'crevice')
+          const relief = role === 'petal' ? 0.95 : (role === 'eye' ? 0.35 : -0.55)   // sepals raised, crevices sunk
+          const y = baseY + domeH * hfrac + relief
+          const gradT = (dx / domeR + 1) / 2
+          const tint = role === 'eye' ? GREENT : pickTint(cw, fu, fv, gradT)
+          const dark = onTile ? matrix[row][col] : false
+          out.push({ x: col - offset, y, z: row - offset, color: dark ? tint.d : tint.l })
+        }
+      }
+      function pushG(onOut, offOut, col, row, H, mid, gridSize, offset) {
+        const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
+        if (onTile) onOut.push({ col, row, H, mid })
+        else offOut.push({ x: col - offset, y: H, z: row - offset, color: mid ? LMID_L : LL })
+      }
+      // a broad OVATE leaf with a SERRATED (toothed) edge, spreading out + drooping below the head
+      function buildLeaf(onOut, offOut, leaf, gridSize, offset) {
+        const { nx, nz, ny, az, pitch, len, wid } = leaf
+        const ca = Math.cos(az), sa = Math.sin(az), ch = Math.cos(pitch), sh = Math.sin(pitch)
+        const px = -sa, pz = ca
+        const steps = Math.ceil(len) + 2
+        for (let s = 0; s <= steps; s++) {
+          const t = s / steps, r = len * t
+          let w = wid * Math.sin(Math.PI * Math.min(1, t * 1.04))     // ovate: widest near the middle
+          w *= (0.80 + 0.20 * (s % 2))                                 // serrated edge (alternating teeth)
+          const droop = 0.42 * len * t * t
+          const cx = nx + ca * ch * r, cz = nz + sa * ch * r, cy = ny + sh * r - droop
+          const hw = Math.max(0, w)
+          for (let dw = -hw; dw <= hw; dw += 1) {
+            const col = Math.round(cx + px * dw + offset), row = Math.round(cz + pz * dw + offset)
+            pushG(onOut, offOut, col, row, Math.max(0.5, cy), Math.abs(dw) < 0.7, gridSize, offset)
+          }
+        }
+      }
+
+      function build(content) {
+        const matrix = qrMatrixSafe(content, 'M', 9, HYD_DEAD)
+        const gridSize = matrix.length, offset = (gridSize - 1) / 2, sc = gridSize / 33
+        const groundCells = []
+        for (let row = 0; row < gridSize; row++) for (let col = 0; col < gridSize; col++)
+          groundCells.push({ x: col - offset, y: 0, z: row - offset, color: matrix[row][col] ? FLOOR_DARK_C : CREAM_C })
+        let hsh = 2166136261 >>> 0
+        for (let r = 0; r < gridSize; r++) for (let c = 0; c < gridSize; c++) { hsh ^= matrix[r][c] ? 1 : 0; hsh = Math.imul(hsh, 16777619) >>> 0 }
+        let rs = hsh || 1; const rnd = () => { rs = (Math.imul(rs, 1664525) + 1013904223) >>> 0; return rs / 4294967296 }
+
+        const S = gridSize * 0.5 - 0.6
+        const potR = 6.6 * sc, potH = Math.max(4, Math.round(9 * sc))
+        const potCells = []; buildPot(potCells, potR, potH, matrix, gridSize, offset)
+
+        const onLeaf = [], overhang = [], solid = []
+        const cw = CWS[Math.floor(rnd() * CWS.length)]
+
+        // a woody stem arcing from the soil centre out to a tip (stays central low, fans out near the top)
+        function buildStem(tipX, tipZ, tipY) {
+          const steps = Math.max(6, Math.round((tipY - potH) + Math.hypot(tipX, tipZ)))
+          const r = Math.max(0.8, 1.05 * sc), nodes = []
+          for (let i = 0; i <= steps; i++) {
+            const t = i / steps
+            const bx = tipX * Math.pow(t, 1.25), bz = tipZ * Math.pow(t, 1.25), by = potH + (tipY - potH) * t
+            nodes.push([bx, by, bz])
+            const mm = Math.ceil(r)
+            for (let ax = -mm; ax <= mm; ax++) for (let az2 = -mm; az2 <= mm; az2++) {
+              if (Math.hypot(ax, az2) > r) continue
+              const col = Math.round(bx + ax + offset), row = Math.round(bz + az2 + offset)
+              const onT = col >= 0 && row >= 0 && col < gridSize && row < gridSize
+              if (onT) onLeaf.push({ col, row, H: by, stem: true })
+              else overhang.push({ x: col - offset, y: by, z: row - offset, color: STK_L })
+            }
+          }
+          return nodes
+        }
+        // an OPPOSITE leaf pair at a node (two leaves 180° apart), broad ovate serrated, drooping
+        function leafPairAt(bx, bz, by, pairAz, len, wid) {
+          for (const side of [0, Math.PI]) {
+            const az = pairAz + side, pitch = 0.10 + rnd() * 0.12
+            let L = len; const ch = Math.cos(pitch)
+            const tx = bx + Math.cos(az) * ch * L, tz = bz + Math.sin(az) * ch * L
+            const over = Math.max(Math.abs(tx), Math.abs(tz)) / S
+            if (over > 1) L /= over
+            buildLeaf(onLeaf, overhang, { nx: bx, nz: bz, ny: by, az, pitch, len: L, wid }, gridSize, offset)
+          }
+        }
+
+        // MULTI-STEMMED MOUND: a tall central stem + side stems arching out, each ending in a TERMINAL head.
+        // The head SITS on the stem tip → nothing levitates. Leaves are opposite + decussate (each pair 90° to the last).
+        const nStems = 2 + Math.floor(rnd() * 2)               // 2–3 heads
+        const baseAz = rnd() * Math.PI * 2
+        const heads = []
+        for (let s = 0; s < nStems; s++) {
+          const isMain = s === 0
+          const az = baseAz + (s / nStems) * Math.PI * 2 + (rnd() - 0.5) * 0.5
+          const reach = (isMain ? (0.8 + rnd() * 1.2) : (5.0 + rnd() * 2.5)) * sc
+          const tipY = potH + (isMain ? (11 + rnd() * 2) : (8 + rnd() * 2)) * sc
+          const headR = (isMain ? (7.2 + rnd() * 1.2) : (4.8 + rnd() * 1.4)) * sc
+          const lim = S - headR - 1
+          let tipX = Math.max(-lim, Math.min(lim, Math.cos(az) * reach))
+          let tipZ = Math.max(-lim, Math.min(lim, Math.sin(az) * reach))
+          const nodes = buildStem(tipX, tipZ, tipY)
+          const NP = 2 + Math.floor(rnd() * 2), leafBaseAz = az + Math.PI / 2 + rnd() * 0.4
+          for (let p = 0; p < NP; p++) {
+            const t = 0.32 + 0.5 * (NP > 1 ? p / (NP - 1) : 0)   // leaves climb the stem, up near the head
+            const node = nodes[Math.round(t * (nodes.length - 1))]
+            leafPairAt(node[0], node[2], node[1], leafBaseAz + p * (Math.PI / 2), (8 + rnd() * 2.5) * sc, (2.6 + rnd() * 0.7) * sc)
+          }
+          // head base drops below the stem tip so the stem enters the head → no floating gap
+          heads.push({ cx: tipX, cz: tipZ, baseY: tipY - 1.8 * sc, R: Math.min(headR, S - 1) })
+        }
+
+        // colour stem + leaf cells (module-matched), then build the floret heads at the tips (globose mopheads)
+        const matched = []
+        for (const v of onLeaf) {
+          const dark = matrix[v.row][v.col]
+          const color = v.stem ? (dark ? STK_D : STK_L) : (v.mid ? (dark ? LMID_D : LMID_L) : (dark ? LD : LL))
+          matched.push({ x: v.col - offset, y: v.H, z: v.row - offset, color })
+        }
+        for (const h of heads) buildDome(solid, h.cx, h.cz, h.baseY, h.R, h.R * 0.5, cw, matrix, gridSize, offset)
+
+        let maxR = 0, maxY = 0
+        for (const v of onLeaf) { const r = Math.hypot(v.col - offset, v.row - offset); if (r > maxR) maxR = r; if (v.H > maxY) maxY = v.H }
+        for (const c of solid.concat(overhang)) { const r = Math.hypot(c.x, c.z); if (r > maxR) maxR = r; if (c.y > maxY) maxY = c.y }
+        if (potR > maxR) maxR = potR
+        return {
+          groups: [
+            { cells: groundCells, fade: false, sway: false },
+            { cells: potCells, fade: false, sway: false },
+            { cells: matched, fade: false, sway: true },
+            { cells: overhang, fade: false, sway: true },
+            { cells: solid, fade: false, sway: true }
+          ],
+          view: { span: gridSize, maxR, maxY, spanK: 0.6, radK: 0.86, heightK: 0.62, focusK: 0.5 }
+        }
+      }
+      return { build }
+    })()
+
+    // ======================================================================
+    // model registry
+    // ======================================================================
+    const MODELS = {
+      'caladium-h': { accent: '#c24d77', bg: '#f7f1f3', grow: 'grow caladium', seasons: false, build: c => CAL.build(c, 'H') },
+      'caladium-m': { accent: '#c24d77', bg: '#f7f1f3', grow: 'grow caladium', seasons: false, build: c => CAL.build(c, 'M') },
+      'pine':       { accent: '#4a7c4e', bg: '#f2f5f2', grow: 'grow pine',     seasons: true,  build: (c, v) => PINE.build(c, v) },
+      'frangipani': { accent: '#c98a2e', bg: '#f6f2ea', grow: 'grow frangipani', seasons: false, build: c => FRANGI.build(c) },
+      'pitcher':    { accent: '#7a8f3a', bg: '#f1f3ec', grow: 'grow pitcher', seasons: false, build: c => PITCHER.build(c) },
+      'hydrangea':  { accent: '#7d6cc0', bg: '#f2f1f8', grow: 'grow hydrangea', seasons: false, build: c => HYDRANGEA.build(c) }
+    }
+
+    // ======================================================================
+    // scene — one renderer / camera / loop for every model
+    // ======================================================================
+    const app = document.getElementById('app')
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.setSize(window.innerWidth, window.innerHeight)
+    renderer.outputColorSpace = THREE.SRGBColorSpace
+    app.appendChild(renderer.domElement)
+
+    const scene = new THREE.Scene()
+    scene.background = new THREE.Color(MODELS['hydrangea'].bg)
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 8000) // ortho keeps lifted voxels on their footprint top-down
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xa6a8a6, 1.02))
+    const sun = new THREE.DirectionalLight(0xffffff, 1.18)
+    sun.position.set(-11, 29, 11)
+    scene.add(sun)
+
+    const cubeGeo = new THREE.BoxGeometry(CUBE, CUBE, CUBE)
+    const solidMat = new THREE.MeshStandardMaterial({ roughness: 0.88, flatShading: true })          // ground + the plant body (the QR)
+    const fadeMat = new THREE.MeshStandardMaterial({ roughness: 0.9, flatShading: true, transparent: true, opacity: 1 }) // pot/trunk/overhang — fade when flat
+    const obj = new THREE.Object3D()
+
+    let meshes = []          // { mesh, sway }
+    let view = null
+    let currentModel = 'hydrangea'
+    let variant = 'forest'
+
+    function makeMesh(cells, mat) {
+      const mesh = new THREE.InstancedMesh(cubeGeo, mat, cells.length)
+      for (let i = 0; i < cells.length; i++) {
+        const b = cells[i]
+        obj.position.set(b.x, b.y + CUBE / 2, b.z)
+        obj.updateMatrix(); mesh.setMatrixAt(i, obj.matrix)
+        mesh.setColorAt(i, b.color)
+      }
+      mesh.instanceMatrix.needsUpdate = true
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+      return mesh
+    }
+
+    function rebuild() {
+      const data = MODELS[currentModel].build(input.value || DEFAULT_CONTENT, variant)
+      view = data.view
+      for (const m of meshes) { scene.remove(m.mesh); m.mesh.dispose() }
+      meshes = []
+      for (const g of data.groups) {
+        if (!g.cells.length) continue
+        const mesh = makeMesh(g.cells, g.fade ? fadeMat : solidMat)
+        scene.add(mesh); meshes.push({ mesh, sway: g.sway })
+      }
+    }
+
+    // ---- camera: flat ↔ iso morph + drag orbit ----------------------------
+    let t = 0, target = 1
+    let az = 0.7, el = 0.61
+    let exporting = false
+    const pos = new THREE.Vector3(), tgt = new THREE.Vector3(), dir = new THREE.Vector3(), up = new THREE.Vector3()
+    const UP_FLAT = new THREE.Vector3(0, 0, -1), UP_ISO = new THREE.Vector3(0, 1, 0)
+    function easeInOut(x) { return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2 }
+    function fadeOpacity(e) { return 1 } // top-down is an honest projection of the 3D: pot/trunk/overhang always present, no fade/morph
+
+    // place an ortho camera for a grow amount e (0 flat → 1 iso), azimuth and viewport aspect.
+    // shared by the live loop and the export renderer so what you record matches what you see.
+    function applyCamera(cam, e, azv, aspect) {
+      const span = view.span
+      // +4 modules of quiet zone on the tight axis so coarse (level-M) codes still anchor their finders
+      const flatHalf = Math.max(span * 0.5 + 4, span / (2 * aspect)) * 1.06
+      const isoHalf = Math.max(span * view.spanK, view.maxR * view.radK, view.maxY * view.heightK) * 1.1
+      const halfH = flatHalf + (isoHalf - flatHalf) * e
+      cam.top = halfH; cam.bottom = -halfH; cam.left = -halfH * aspect; cam.right = halfH * aspect
+      cam.updateProjectionMatrix()
+      const elNow = (Math.PI / 2) * (1 - e) + el * e
+      const azNow = azv * e
+      dir.set(Math.cos(elNow) * Math.sin(azNow), Math.sin(elNow), Math.cos(elNow) * Math.cos(azNow))
+      up.copy(UP_FLAT).lerp(UP_ISO, e).normalize()
+      tgt.set(0, view.maxY * view.focusK * e, 0)
+      pos.copy(dir).multiplyScalar(span * 6).add(tgt)
+      cam.position.copy(pos); cam.up.copy(up); cam.lookAt(tgt)
+    }
+
+    function frame(now) {
+      if (exporting) { requestAnimationFrame(frame); return } // export drives the scene; pause the live loop
+      t += (target - t) * 0.10
+      if (Math.abs(target - t) < 0.0004) t = target
+      const e = easeInOut(t)
+      applyCamera(camera, e, az, window.innerWidth / window.innerHeight)
+      // fade material fades to nothing when flat → clean square QR; sway × e → 0 at rest so the match holds
+      fadeMat.opacity = fadeOpacity(e)
+      const tm = now / 1000
+      const sz = Math.sin(tm * 1.0) * 0.012 * e, sx = Math.cos(tm * 0.8) * 0.008 * e
+      for (const m of meshes) if (m.sway) { m.mesh.rotation.z = sz; m.mesh.rotation.x = sx }
+      renderer.render(scene, camera)
+      requestAnimationFrame(frame)
+    }
+
+    // ---- interaction ------------------------------------------------------
+    const btn = document.getElementById('toggle')
+    const input = document.getElementById('content')
+    const plantSeg = document.getElementById('plantSeg')
+    const loading = document.getElementById('loading')
+    input.value = DEFAULT_CONTENT
+
+    function toggle() {
+      target = target === 0 ? 1 : 0
+      if (target === 0) az = Math.atan2(Math.sin(az), Math.cos(az)) // un-spin the shortest way back to top-down
+      btn.textContent = target === 1 ? 'flatten to QR' : MODELS[currentModel].grow
+    }
+    btn.addEventListener('click', toggle)
+
+    let dragging = false, lastX = 0, lastY = 0, moved = 0
+    const cv = renderer.domElement
+    cv.addEventListener('pointerdown', ev => { dragging = true; lastX = ev.clientX; lastY = ev.clientY; moved = 0; cv.setPointerCapture(ev.pointerId) })
+    cv.addEventListener('pointermove', ev => {
+      if (!dragging) return
+      const dx = ev.clientX - lastX, dy = ev.clientY - lastY
+      lastX = ev.clientX; lastY = ev.clientY; moved += Math.abs(dx) + Math.abs(dy)
+      az -= dx * 0.006
+      el = Math.max(0.2, Math.min(1.45, el + dy * 0.005))
+    })
+    cv.addEventListener('pointerup', () => { dragging = false; if (moved < 6) toggle() })
+
+    function applyTheme(m) {
+      const root = document.documentElement.style
+      root.setProperty('--accent', m.accent)
+      root.setProperty('--bg', m.bg)
+      scene.background.set(m.bg)
+      document.querySelector('meta[name=theme-color]').setAttribute('content', m.bg)
+    }
+
+    // one row, four presets: caladium fine/bold (error-correction H/M) and pine forest/snow.
+    // each button carries its model and (for pine) its season; season is irrelevant to caladium.
+    plantSeg.addEventListener('click', ev => {
+      const b = ev.target.closest('button'); if (!b) return
+      currentModel = b.dataset.model
+      if (b.dataset.season) variant = b.dataset.season
+      const m = MODELS[currentModel]
+      plantSeg.querySelectorAll('button').forEach(x => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on) })
+      applyTheme(m)
+      btn.textContent = target === 1 ? 'flatten to QR' : m.grow
+      rebuild()
+    })
+
+    // ---- export: a scannable still + a top-down → grow → orbit → flatten loop ----
+    const saveBtn = document.getElementById('saveBtn')
+    const saveMenu = document.getElementById('saveMenu')
+    const recOverlay = document.getElementById('recOverlay')
+    const recBar = document.getElementById('recBar')
+    const recFill = recBar.querySelector('i')
+    function setProg(frac) { recBar.classList.remove('indet'); recFill.style.width = (Math.max(0, Math.min(1, frac)) * 100) + '%' }
+    let exportRenderer = null, exportCamera = null, compositor = null, compCtx = null
+    const EXPORT_SIZE = 1080
+    const FOOTER_H = 168                       // signature band below the code; the QR keeps its full quiet zone above
+    const PZ_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAlgAAAFRCAYAAACogdOJAAAAAXNSR0IArs4c6QAAAQJlWElmTU0AKgAAAAgABwESAAMAAAABAAEAAAEaAAUAAAABAAAAYgEbAAUAAAABAAAAagEoAAMAAAABAAIAAAExAAIAAAA3AAAAcgE7AAIAAAAKAAAAqodpAAQAAAABAAAAtAAAAAAAAAEsAAAAAQAAASwAAAABQ2FudmEgZG9jPURBSEhCRzFjRkdRIHVzZXI9VUFGSndIb19oYU0gYnJhbmQ9eml0aW5iYWxpAABweW4gemhlcm4AAAaQAAAHAAAABDAyMTCRAQAHAAAABAECAwCgAAAHAAAABDAxMDCgAQADAAAAAQABAACgAgAEAAAAAQAAAligAwAEAAAAAQAAAVEAAAAAZqfEIgAAAAlwSFlzAAAuIwAALiMBeKU/dgAABjdpVFh0WE1MOmNvbS5hZG9iZS54bXAAAAAAADx4OnhtcG1ldGEgeG1sbnM6eD0iYWRvYmU6bnM6bWV0YS8iIHg6eG1wdGs9IlhNUCBDb3JlIDYuMC4wIj4KICAgPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4KICAgICAgPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIKICAgICAgICAgICAgeG1sbnM6ZXhpZj0iaHR0cDovL25zLmFkb2JlLmNvbS9leGlmLzEuMC8iCiAgICAgICAgICAgIHhtbG5zOnhtcD0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wLyIKICAgICAgICAgICAgeG1sbnM6dGlmZj0iaHR0cDovL25zLmFkb2JlLmNvbS90aWZmLzEuMC8iCiAgICAgICAgICAgIHhtbG5zOmRjPSJodHRwOi8vcHVybC5vcmcvZGMvZWxlbWVudHMvMS4xLyI+CiAgICAgICAgIDxleGlmOkNvbG9yU3BhY2U+NjU1MzU8L2V4aWY6Q29sb3JTcGFjZT4KICAgICAgICAgPGV4aWY6UGl4ZWxYRGltZW5zaW9uPjYwMDA8L2V4aWY6UGl4ZWxYRGltZW5zaW9uPgogICAgICAgICA8ZXhpZjpFeGlmVmVyc2lvbj4wMjEwPC9leGlmOkV4aWZWZXJzaW9uPgogICAgICAgICA8ZXhpZjpGbGFzaFBpeFZlcnNpb24+MDEwMDwvZXhpZjpGbGFzaFBpeFZlcnNpb24+CiAgICAgICAgIDxleGlmOlBpeGVsWURpbWVuc2lvbj4zMzc1PC9leGlmOlBpeGVsWURpbWVuc2lvbj4KICAgICAgICAgPGV4aWY6Q29tcG9uZW50c0NvbmZpZ3VyYXRpb24+CiAgICAgICAgICAgIDxyZGY6U2VxPgogICAgICAgICAgICAgICA8cmRmOmxpPjE8L3JkZjpsaT4KICAgICAgICAgICAgICAgPHJkZjpsaT4yPC9yZGY6bGk+CiAgICAgICAgICAgICAgIDxyZGY6bGk+MzwvcmRmOmxpPgogICAgICAgICAgICAgICA8cmRmOmxpPjA8L3JkZjpsaT4KICAgICAgICAgICAgPC9yZGY6U2VxPgogICAgICAgICA8L2V4aWY6Q29tcG9uZW50c0NvbmZpZ3VyYXRpb24+CiAgICAgICAgIDx4bXA6Q3JlYXRvclRvb2w+Q2FudmEgZG9jPURBSEhCRzFjRkdRIHVzZXI9VUFGSndIb19oYU0gYnJhbmQ9eml0aW5iYWxpPC94bXA6Q3JlYXRvclRvb2w+CiAgICAgICAgIDx0aWZmOlJlc29sdXRpb25Vbml0PjI8L3RpZmY6UmVzb2x1dGlvblVuaXQ+CiAgICAgICAgIDx0aWZmOk9yaWVudGF0aW9uPjE8L3RpZmY6T3JpZW50YXRpb24+CiAgICAgICAgIDx0aWZmOlhSZXNvbHV0aW9uPjMwMDwvdGlmZjpYUmVzb2x1dGlvbj4KICAgICAgICAgPHRpZmY6WVJlc29sdXRpb24+MzAwPC90aWZmOllSZXNvbHV0aW9uPgogICAgICAgICA8ZGM6dGl0bGU+CiAgICAgICAgICAgIDxyZGY6QWx0PgogICAgICAgICAgICAgICA8cmRmOmxpIHhtbDpsYW5nPSJ4LWRlZmF1bHQiPnB5bnpoZXJuIGxvZ28gLSA4PC9yZGY6bGk+CiAgICAgICAgICAgIDwvcmRmOkFsdD4KICAgICAgICAgPC9kYzp0aXRsZT4KICAgICAgICAgPGRjOmNyZWF0b3I+CiAgICAgICAgICAgIDxyZGY6U2VxPgogICAg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'
+    const logoImg = new Image(); logoImg.src = PZ_LOGO
+    const pageMark = document.getElementById('pageMark'); if (pageMark) pageMark.src = PZ_LOGO // on-page signature reuses the embedded logo
+
+    function ensureExport() {
+      if (exportRenderer) return
+      exportRenderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })
+      exportRenderer.setPixelRatio(1)
+      exportRenderer.setSize(EXPORT_SIZE, EXPORT_SIZE, false)
+      exportRenderer.outputColorSpace = THREE.SRGBColorSpace
+      exportCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 8000)
+      // a 2D compositor is the on-screen, captured surface: it boosts contrast on the flat (scannable) frames
+      // so coarse level-M codes still decode, while the 3D orbit stays natural. captureStream reads it.
+      compositor = document.createElement('canvas'); compositor.width = EXPORT_SIZE; compositor.height = EXPORT_SIZE + FOOTER_H
+      compCtx = compositor.getContext('2d')
+      recOverlay.insertBefore(compositor, recBar)
+    }
+    function clearSway() { for (const m of meshes) { m.mesh.rotation.z = 0; m.mesh.rotation.x = 0 } }
+    function download(href, name) { const a = document.createElement('a'); a.href = href; a.download = name; document.body.appendChild(a); a.click(); a.remove() }
+
+    // embed authorship as PNG tEXt chunks (invisible, but provable) — inserted right after IHDR
+    const CRC_TABLE = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); t[n] = c >>> 0 } return t })()
+    function crc32(b) { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC_TABLE[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0 }
+    function textChunk(keyword, text) {
+      const body = []
+      for (let i = 0; i < keyword.length; i++) body.push(keyword.charCodeAt(i) & 0xFF)
+      body.push(0)
+      for (let i = 0; i < text.length; i++) body.push(text.charCodeAt(i) & 0xFF)
+      const type = [116, 69, 88, 116] // 'tEXt'
+      const typed = new Uint8Array(type.concat(body))      // crc covers type + data
+      const out = new Uint8Array(12 + body.length)
+      const dv = new DataView(out.buffer)
+      dv.setUint32(0, body.length); out.set(type, 4); out.set(body, 8); dv.setUint32(8 + body.length, crc32(typed))
+      return out
+    }
+    function pngWithText(dataURL, fields) {
+      const bin = atob(dataURL.split(',')[1]); const png = new Uint8Array(bin.length)
+      for (let i = 0; i < bin.length; i++) png[i] = bin.charCodeAt(i)
+      const at = 33 // 8 sig + IHDR(4 len + 4 type + 13 data + 4 crc)
+      const chunks = Object.entries(fields).map(([k, v]) => textChunk(k, v))
+      const extra = chunks.reduce((n, c) => n + c.length, 0)
+      const out = new Uint8Array(png.length + extra)
+      out.set(png.subarray(0, at), 0)
+      let off = at
+      for (const c of chunks) { out.set(c, off); off += c.length }
+      out.set(png.subarray(at), off)
+      return new Blob([out], { type: 'image/png' })
+    }
+    // filenames read plant · qr · site, e.g. caladium-h-qr-pynzhern-com-loop.gif
+    function exportSlug() {
+      let s = (input.value || DEFAULT_CONTENT).trim().replace(/^https?:\/\//i, '').replace(/^www\./i, '')
+      s = s.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase()
+      return s.slice(0, 40) || 'qr'
+    }
+    function exportTag() { return currentModel === 'pine' ? `pine-${variant}` : currentModel }
+    function exportName(suffix, ext) { return `${exportTag()}-qr-${exportSlug()}${suffix}.${ext}` }
+    // render one export frame (square, no HUD) into the compositor; contrast is full at flat (e=0), none in iso (e=1)
+    // only the low-contrast designs need a contrast lift to stay scannable as a standalone image; the rest
+    // export exactly as shown on screen. boost applies at flat (e=0) and ramps to none by iso (e=1).
+    function exportBoost() {
+      if (currentModel === 'pine') return variant === 'snow' ? 2.0 : 1.0 // snow + the footer logo is the worst case
+      if (currentModel === 'caladium-m') return 1.5
+      return 1.0 // caladium-h, pine forest — scan raw, no boost → saved == on-screen
+    }
+    function renderExportFrame(e, azv, kOverride) {
+      ensureExport(); clearSway()
+      fadeMat.opacity = fadeOpacity(e)
+      applyCamera(exportCamera, e, azv, 1)
+      exportRenderer.render(scene, exportCamera)
+      const K = kOverride != null ? kOverride : 1 + (exportBoost() - 1) * (1 - Math.max(0, Math.min(1, e)))
+      compCtx.clearRect(0, 0, compositor.width, compositor.height)
+      compCtx.filter = `contrast(${Math.round(K * 100)}%)`
+      compCtx.drawImage(exportRenderer.domElement, 0, 0, EXPORT_SIZE, EXPORT_SIZE) // the code (square)
+      compCtx.filter = 'none'
+      // footer: match it to the (boosted) quiet-zone colour so there's no seam, then drop the signature in
+      const q = compCtx.getImageData(6, 6, 1, 1).data
+      compCtx.fillStyle = `rgb(${q[0]},${q[1]},${q[2]})`
+      compCtx.fillRect(0, EXPORT_SIZE, compositor.width, FOOTER_H)
+      if (logoImg.complete && logoImg.naturalWidth) {
+        const lw = EXPORT_SIZE * 0.19, lh = lw * (logoImg.naturalHeight / logoImg.naturalWidth)
+        compCtx.globalAlpha = 0.72
+        compCtx.drawImage(logoImg, (EXPORT_SIZE - lw) / 2, EXPORT_SIZE + (FOOTER_H - lh) / 2, lw, lh)
+        compCtx.globalAlpha = 1
+      }
+    }
+
+    function savePng() {
+      renderExportFrame(0, 0) // flat top-down → the scannable still
+      const blob = pngWithText(compositor.toDataURL('image/png'), {
+        Copyright: '(c) Khoo Pyn Zhern, pynzhern.com'
+      })
+      const url = URL.createObjectURL(blob)
+      download(url, exportName('', 'png'))
+      setTimeout(() => URL.revokeObjectURL(url), 5000)
+    }
+
+    // capture timeline: hold flat → grow → hold grown → ease a full 360° spin → hold grown → flatten → hold flat.
+    // the spin eases in and out of rest (no abrupt start/stop) and is bracketed by short stills, so the loop
+    // breathes instead of snapping into the orbit. the longer flat holds also give the video a clear cover frame.
+    // endpoints are the identical flat frame and the spin lands back at az 0 (≡ 2π), so the clip still loops
+    // seamlessly with no extra un-spin on the flatten.
+    const EXP = { holdA: 0.5, grow: 1.1, holdGrownIn: 0.4, orbit: 3.4, holdGrownOut: 0.4, flat: 1.1, holdB: 0.5 }
+    const EXP_DUR = EXP.holdA + EXP.grow + EXP.holdGrownIn + EXP.orbit + EXP.holdGrownOut + EXP.flat + EXP.holdB
+    function exportState(s) {
+      if (s < EXP.holdA) return [0, 0]; s -= EXP.holdA
+      if (s < EXP.grow) return [easeInOut(s / EXP.grow), 0]; s -= EXP.grow
+      if (s < EXP.holdGrownIn) return [1, 0]; s -= EXP.holdGrownIn       // rest, fully grown, before the spin
+      if (s < EXP.orbit) return [1, 2 * Math.PI * easeInOut(s / EXP.orbit)]; s -= EXP.orbit  // eased spin: rest → 360° → rest
+      if (s < EXP.holdGrownOut) return [1, 0]; s -= EXP.holdGrownOut     // rest, fully grown, after the spin (az 2π ≡ 0)
+      if (s < EXP.flat) return [easeInOut(1 - s / EXP.flat), 0]          // az = 0 here, NOT 2π → clean tilt-down, no spin
+      return [0, 0]
+    }
+    function pickMime() {
+      const c = ['video/mp4;codecs=avc1.42E01E', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4']
+      for (const t of c) if (window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t
+      return ''
+    }
+    const canRecord = typeof HTMLCanvasElement.prototype.captureStream === 'function' && !!window.MediaRecorder && !!pickMime()
+    const mp4Item = saveMenu.querySelector('[data-act="mp4"]')
+    if (!canRecord) { mp4Item.disabled = true; mp4Item.title = 'video capture is not supported in this browser' }
+
+    function setBusy(on, label) {
+      saveBtn.disabled = on; btn.disabled = on
+      plantSeg.querySelectorAll('button').forEach(b => b.disabled = on)
+      if (on) closeMenu()
+      // recording/encoding status is shown by the progress bar, not text
+    }
+
+    function recordLoop() {
+      if (!canRecord) return
+      ensureExport(); clearSway()
+      exporting = true; recOverlay.classList.add('on'); setBusy(true); setProg(0)
+      const mime = pickMime()
+      const stream = compositor.captureStream(60)
+      const chunks = []
+      const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8000000 })
+      rec.ondataavailable = ev => { if (ev.data && ev.data.size) chunks.push(ev.data) }
+      // paint the flat QR before capture begins so the video's first/cover frame is the
+      // scannable code, not a stale or blank compositor frame
+      renderExportFrame(0, 0)
+      rec.onstop = () => {
+        const blob = new Blob(chunks, { type: mime })
+        const ext = mime.includes('mp4') ? 'mp4' : 'webm'
+        const url = URL.createObjectURL(blob)
+        download(url, exportName('-loop', ext))
+        setTimeout(() => URL.revokeObjectURL(url), 5000)
+        recOverlay.classList.remove('on'); exporting = false; setBusy(false)
+      }
+      rec.start()
+      const start = performance.now()
+      function step(now) {
+        const s = (now - start) / 1000
+        const [e, azv] = exportState(Math.min(s, EXP_DUR))
+        renderExportFrame(e, azv)
+        setProg(s / EXP_DUR)
+        if (s < EXP_DUR) requestAnimationFrame(step)
+        else rec.stop()
+      }
+      requestAnimationFrame(step)
+    }
+
+    // ---- GIF export: same loop, encoded client-side (loops inline everywhere a video won't) ----
+    const GIF_SIZE = 480, GIF_FPS = 24 // 24 = cinematic standard: smooth to the eye, lighter than 30 to encode/download
+    const GIF_H = Math.round(GIF_SIZE * (EXPORT_SIZE + FOOTER_H) / EXPORT_SIZE)
+    let GIFlib = null, gifWorkerURL = null, gifScratch = null, gifScratchCtx = null
+    async function ensureGifLib() {
+      if (GIFlib) return
+      if (!window.GIF) {
+        await new Promise((res, rej) => {
+          const s = document.createElement('script')
+          s.src = 'https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js'
+          s.onload = res; s.onerror = () => rej(new Error('gif.js load failed'))
+          document.head.appendChild(s)
+        })
+      }
+      GIFlib = window.GIF
+      const resp = await fetch('https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js') // blob worker → no cross-origin worker error
+      gifWorkerURL = URL.createObjectURL(await resp.blob())
+    }
+    async function saveGif() {
+      ensureExport(); clearSway()
+      exporting = true; recOverlay.classList.add('on'); setBusy(true); recBar.classList.add('indet')
+      try { await ensureGifLib() }
+      catch (e) { recOverlay.classList.remove('on'); exporting = false; setBusy(false); alert('could not load the gif encoder (offline?)'); return }
+      if (!gifScratch) { gifScratch = document.createElement('canvas'); gifScratch.width = GIF_SIZE; gifScratch.height = GIF_H; gifScratchCtx = gifScratch.getContext('2d') }
+      const gif = new GIFlib({ workers: 4, quality: 8, width: GIF_SIZE, height: GIF_H, workerScript: gifWorkerURL, repeat: 0 })
+      const frames = Math.round(EXP_DUR * GIF_FPS)
+      for (let i = 0; i < frames; i++) {
+        const [e, azv] = exportState(Math.min(i / GIF_FPS, EXP_DUR))
+        renderExportFrame(e, azv)
+        gifScratchCtx.clearRect(0, 0, GIF_SIZE, GIF_H)
+        gifScratchCtx.drawImage(compositor, 0, 0, GIF_SIZE, GIF_H)
+        gif.addFrame(gifScratchCtx, { copy: true, delay: Math.round(1000 / GIF_FPS) })
+        // yield every frame so the capture overlay repaints smoothly (matches the mp4 preview),
+        // not every 4th (which looked choppy on screen even though the saved file was fine)
+        setProg(0.5 * i / frames)
+        await new Promise(r => requestAnimationFrame(r))
+      }
+      gif.on('progress', p => setProg(0.5 + 0.5 * p))
+      gif.on('finished', blob => {
+        download(URL.createObjectURL(blob), exportName('-loop', 'gif'))
+        recOverlay.classList.remove('on'); exporting = false; setBusy(false)
+      })
+      gif.render()
+    }
+
+    // ---- about popover + save menu ----
+    const aboutBtn = document.getElementById('aboutBtn')
+    const aboutCard = document.getElementById('aboutCard')
+    function closeMenu() { saveMenu.classList.remove('open'); saveBtn.setAttribute('aria-expanded', 'false') }
+    saveBtn.addEventListener('click', ev => {
+      ev.stopPropagation()
+      const open = saveMenu.classList.toggle('open'); saveBtn.setAttribute('aria-expanded', String(open))
+      aboutCard.classList.remove('open')
+    })
+    saveMenu.addEventListener('click', ev => {
+      ev.stopPropagation()
+      const b = ev.target.closest('button'); if (!b || b.disabled) return
+      closeMenu()
+      const act = b.dataset.act
+      if (act === 'png') savePng(); else if (act === 'mp4') recordLoop(); else if (act === 'gif') saveGif()
+    })
+    aboutBtn.addEventListener('click', ev => {
+      ev.stopPropagation()
+      const open = aboutCard.classList.toggle('open'); aboutBtn.setAttribute('aria-expanded', String(open))
+      closeMenu()
+    })
+    aboutCard.addEventListener('click', ev => ev.stopPropagation())
+    document.addEventListener('click', () => { closeMenu(); aboutCard.classList.remove('open') })
+    document.addEventListener('keydown', ev => { if (ev.key === 'Escape') { closeMenu(); aboutCard.classList.remove('open') } })
+
+    // small hook for embedding / testing: grab a square frame as a PNG data URL (k overrides the contrast boost)
+
+    window.__bqBuild = (c) => { input.value = c; rebuild() }
+    window.__span = () => (view ? view.span : null)
+    window.__decSync = () => { renderExportFrame(0, 0, 1.0); const z = EXPORT_SIZE; const r = jsQR(compCtx.getImageData(0, 0, z, z).data, z, z, { inversionAttempts: 'dontInvert' }); return r ? { d: r.data, v: r.version } : null }
+    ;(function () {
+      const badge = document.createElement('div')
+      badge.style.cssText = 'position:fixed;top:14px;right:14px;z-index:9999;font:600 13px -apple-system,Helvetica,sans-serif;padding:5px 11px;border-radius:9px;background:#efeae3;color:#999;box-shadow:0 2px 10px rgba(0,0,0,.08)'
+      badge.textContent = 'scan: …'; document.body.appendChild(badge)
+      async function check() {
+        try { const url = input.value || DEFAULT_CONTENT; const r = window.__decSync(); const ok = r && r.d === url
+          badge.style.background = ok ? '#e3f3e3' : '#fbe3e3'; badge.style.color = ok ? '#2e7d32' : '#c62828'; badge.textContent = ok ? ('scans · v' + r.v) : 'no scan'
+        } catch (e) { badge.textContent = 'scan: err' }
+      }
+      let last = ''; setInterval(() => { const sig = currentModel + '|' + input.value; if (sig !== last) { last = sig; setTimeout(check, 700) } }, 600)
+    })()
+
+    window.qrBotanical = { frame: (e, azv, k) => { renderExportFrame(e || 0, azv || 0, k); return compositor.toDataURL('image/png') } }
+
+    let debounce = null
+    input.addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(rebuild, 250) })
+    window.addEventListener('resize', () => renderer.setSize(window.innerWidth, window.innerHeight))
+
+    rebuild()
+    loading.classList.add('gone')
+    setTimeout(() => loading.remove(), 500)
+    requestAnimationFrame(frame)
+  </script>
+</body>
+</html>
