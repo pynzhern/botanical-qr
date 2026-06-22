@@ -1,0 +1,108 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>decode sweep 50</title></head>
+<body style="font-family:monospace;background:#111;color:#0f0;padding:16px;white-space:pre-wrap">
+<div id="out">running…</div>
+<div id="frames"></div>
+<script type="module">
+import jsQR from 'https://esm.sh/jsqr@1.4.0'
+const qp = new URLSearchParams(location.search)
+const bud = qp.get('bud') || ''
+const nfl = qp.get('nfl') || ''
+const ver = qp.get('ver') || '17'
+const file = qp.get('file') || 'frangipani-qr-v38.html'
+// 50 diverse contents — varied length, paths, queries, schemes, unicode → varied matrices & palettes
+const urls = [
+  'https://pynzhern.com',
+  'https://pynzhern.com/',
+  'https://www.linkedin.com/in/pynzhern',
+  'https://github.com/pynzhern',
+  'https://github.com/pynzhern/portfolio',
+  'hello@pynzhern.com',
+  'mailto:hello@pynzhern.com',
+  'https://pynzhern.com/projects/botanical-qr',
+  'https://pynzhern.com/projects/botanical-qr?ref=card',
+  'https://twitter.com/pynzhern',
+  'https://instagram.com/pynzhern',
+  'https://www.youtube.com/@pynzhern',
+  'tel:+6591234567',
+  'https://maps.google.com/?q=singapore',
+  'https://pynzhern.com/cv.pdf',
+  'https://pynzhern.com/contact',
+  'https://pynzhern.com/blog/frangipani-qr',
+  'WIFI:S:MyNet;T:WPA;P:pass1234;;',
+  'https://example.com',
+  'https://example.org/a/b/c',
+  'https://news.ycombinator.com',
+  'https://en.wikipedia.org/wiki/Plumeria',
+  'https://pynzhern.com?utm_source=card',
+  'https://t.me/pynzhern',
+  'https://medium.com/@pynzhern',
+  'https://pynzhern.com/x',
+  'https://pynzhern.com/projects',
+  'https://pynzhern.com/about',
+  'https://buy.stripe.com/test_abc123',
+  'https://calendly.com/pynzhern/30min',
+  'https://pynzhern.com/?id=42',
+  'https://pynzhern.com/p/1',
+  'https://pynzhern.com/p/2',
+  'https://pynzhern.com/p/12345',
+  'https://pynzhern.com/share/aBcD1234',
+  'https://drive.google.com/file/d/1AbCdEfG/view',
+  'https://pynzhern.com/feed.xml',
+  'https://pynzhern.com/order/INV-2026-0042',
+  'Hello World 1234',
+  'https://pynzhern.com/path/seg/one/two/three',
+  'https://sub.domain.pynzhern.com',
+  'https://pynzhern.com:8080/app',
+  'https://pynzhern.com/section#top',
+  'https://pynzhern.com/search?q=frangipani',
+  'https://pynzhern.com/a',
+  'https://pynzhern.com/ab',
+  'https://pynzhern.com/abc',
+  'https://pynzhern.com/u/khoo.pyn.zhern',
+  'https://pynzhern.com/r/9f3a2b',
+  'https://pynzhern.com/go/btnq'
+]
+const wrap = document.getElementById('frames'), out = document.getElementById('out')
+const sleep = ms => new Promise(r => setTimeout(r, ms))
+function mkFrame(u) {
+  return new Promise(res => {
+    const f = document.createElement('iframe')
+    f.width = 460; f.height = 460; f.style.border = '0'
+    f.src = `${file}?ver=${ver}${bud ? '&bud=' + bud : ''}${nfl ? '&nfl=' + nfl : ''}&url=${encodeURIComponent(u)}`
+    f.onload = () => res(f)
+    wrap.appendChild(f)
+  })
+}
+const results = []
+for (let i = 0; i < urls.length; i++) {
+  const u = urls[i]
+  const f = await mkFrame(u)
+  await sleep(1400)
+  let decoded = 'FAIL', pal = '?'
+  try {
+    const doc = f.contentDocument
+    doc.getElementById('toggle').click()
+    await sleep(1400)
+    const cv = doc.querySelector('canvas')
+    const g = document.createElement('canvas'); g.width = cv.width; g.height = cv.height
+    g.getContext('2d').drawImage(cv, 0, 0)
+    const img = g.getContext('2d').getImageData(0, 0, g.width, g.height)
+    const r = jsQR(img.data, img.width, img.height)
+    pal = f.contentWindow.__pal
+    decoded = r ? r.data : 'FAIL'
+  } catch (e) { decoded = 'ERR:' + e.message }
+  results.push({ u, ok: decoded === u, decoded, pal })
+  f.remove()
+  const fails = results.filter(x => !x.ok)
+  out.textContent = `bud=${bud} ver=${ver}  (${results.length}/${urls.length} done, ${results.filter(x=>x.ok).length} pass)\n`
+    + (fails.length ? 'FAILURES:\n' + fails.map(x => `  [${x.pal}] ${x.u}  ->  ${x.decoded}`).join('\n') : 'no failures yet')
+  window.__progress = results.length
+}
+window.__results = results
+window.__done = true
+const fails = results.filter(x => !x.ok)
+out.textContent = `DONE bud=${bud} ver=${ver}: ${results.filter(x=>x.ok).length}/${results.length} pass\n`
+  + (fails.length ? 'FAILURES:\n' + fails.map(x => `  [${x.pal}] ${x.u}  ->  ${x.decoded}`).join('\n') : 'ALL PASS ✅')
+</script>
+</body></html>

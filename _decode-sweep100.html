@@ -1,0 +1,74 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>decode sweep 100</title></head>
+<body style="font-family:monospace;background:#111;color:#0f0;padding:16px;white-space:pre-wrap">
+<div id="out">running…</div>
+<div id="frames"></div>
+<script type="module">
+import jsQR from 'https://esm.sh/jsqr@1.4.0'
+const qs = new URLSearchParams(location.search)
+const bud = qs.get('bud') || ''
+const nfl = qs.get('nfl') || ''
+const ver = qs.get('ver') || '17'
+const file = qs.get('file') || 'frangipani-qr-v38.html'
+// 100 diverse contents: curated + programmatic (varied length/scheme/chars → varied matrices & palettes)
+const curated = [
+  'https://pynzhern.com','https://pynzhern.com/','https://www.linkedin.com/in/pynzhern',
+  'https://github.com/pynzhern','https://github.com/pynzhern/portfolio','hello@pynzhern.com',
+  'mailto:hello@pynzhern.com','https://pynzhern.com/projects/botanical-qr','https://twitter.com/pynzhern',
+  'https://instagram.com/pynzhern','https://www.youtube.com/@pynzhern','tel:+6591234567',
+  'https://maps.google.com/?q=singapore','https://pynzhern.com/cv.pdf','https://pynzhern.com/contact',
+  'WIFI:S:MyNet;T:WPA;P:pass1234;;','https://example.com','https://example.org/a/b/c',
+  'https://news.ycombinator.com','https://en.wikipedia.org/wiki/Plumeria','https://t.me/pynzhern',
+  'https://medium.com/@pynzhern','https://buy.stripe.com/test_abc123','https://calendly.com/pynzhern/30min',
+  'https://pynzhern.com/?id=42','https://drive.google.com/file/d/1AbCdEfG/view','Hello World 1234',
+  'https://sub.domain.pynzhern.com','https://pynzhern.com:8080/app','https://pynzhern.com/search?q=frangipani'
+]
+const urls = curated.slice()
+const slugs = ['p','r','u','go','s','n','item','post','tag','ref']
+for (let i = urls.length, k = 0; i < 100; i++, k++) {
+  const seg = slugs[k % slugs.length]
+  const id = (k * 37 + 11).toString(36)
+  urls.push(`https://pynzhern.com/${seg}/${id}${k % 3 === 0 ? '?v=' + (k % 9) : ''}`)
+}
+const wrap = document.getElementById('frames'), out = document.getElementById('out')
+const sleep = ms => new Promise(r => setTimeout(r, ms))
+function mkFrame(u) {
+  return new Promise(res => {
+    const f = document.createElement('iframe')
+    f.width = 440; f.height = 440; f.style.border = '0'
+    f.src = `${file}?ver=${ver}${bud ? '&bud=' + bud : ''}${nfl ? '&nfl=' + nfl : ''}&url=${encodeURIComponent(u)}`
+    f.onload = () => res(f)
+    wrap.appendChild(f)
+  })
+}
+const results = []
+for (let i = 0; i < urls.length; i++) {
+  const u = urls[i]
+  const f = await mkFrame(u)
+  await sleep(1250)
+  let decoded = 'FAIL', pal = '?'
+  try {
+    const doc = f.contentDocument
+    doc.getElementById('toggle').click()
+    await sleep(1250)
+    const cv = doc.querySelector('canvas')
+    const g = document.createElement('canvas'); g.width = cv.width; g.height = cv.height
+    g.getContext('2d').drawImage(cv, 0, 0)
+    const img = g.getContext('2d').getImageData(0, 0, g.width, g.height)
+    const r = jsQR(img.data, img.width, img.height)
+    pal = f.contentWindow.__pal
+    decoded = r ? r.data : 'FAIL'
+  } catch (e) { decoded = 'ERR:' + e.message }
+  results.push({ u, ok: decoded === u, decoded, pal })
+  f.remove()
+  const fails = results.filter(x => !x.ok)
+  out.textContent = `${file} ver=${ver} bud=${bud||'default'}  (${results.length}/${urls.length}, ${results.filter(x=>x.ok).length} pass)\n`
+    + (fails.length ? 'FAILS:\n' + fails.map(x => `  [${x.pal}] ${x.u} -> ${x.decoded}`).join('\n') : 'clean so far')
+  window.__progress = results.length
+}
+window.__results = results; window.__done = true
+const fails = results.filter(x => !x.ok)
+out.textContent = `DONE ${file} ver=${ver} bud=${bud||'default'}: ${results.filter(x=>x.ok).length}/${results.length}\n`
+  + (fails.length ? 'FAILS:\n' + fails.map(x => `  [${x.pal}] ${x.u} -> ${x.decoded}`).join('\n') : 'ALL 100 PASS ✅')
+</script>
+</body></html>

@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Papilionanthe Miss Joaquim — anatomical study</title>
+<style>
+  :root{
+    --ink:#2a2630; --soft:#6b6472; --line:#e7e2ec; --paper:#f7f4f9; --card:#fff;
+    --violet:#9a4d86; --violet-d:#7a3568; --rose:#c98ab8; --mauve:#cdb9d4; --mauve-d:#a892b3;
+    --orange:#f0a23a; --orange-d:#cf7a18; --gold:#f6cf6b; --green:#4f7a43; --green-l:#8fb877; --bark:#6f5a3c;
+    --speck:#5e2b50;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;color:var(--ink);background:linear-gradient(160deg,#f3eef6,#eef3f0);padding:40px 24px 80px}
+  .wrap{max-width:1180px;margin:0 auto}
+  header{margin-bottom:8px}
+  h1{font-size:25px;margin:0 0 4px;letter-spacing:-.2px}
+  h1 em{font-style:italic;color:var(--violet)}
+  .sub{color:var(--soft);margin:0 0 28px;max-width:760px}
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:22px}
+  @media (max-width:860px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:20px 22px;box-shadow:0 6px 24px rgba(60,40,70,.05)}
+  .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.8px;color:var(--soft);margin:0 0 14px;font-weight:650}
+  svg{width:100%;height:auto;display:block;overflow:visible}
+  .lab{font:11px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;fill:var(--ink)}
+  .lab.dim{fill:var(--soft)}
+  .lead{stroke:#c9c2d2;stroke-width:1;fill:none}
+  .dot{fill:#a99fb6}
+  ul{margin:8px 0 0;padding-left:18px}
+  li{margin:4px 0}
+  li b{color:var(--violet-d)}
+  .meas{font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--soft)}
+  .meas b{color:var(--ink)}
+  .pill{display:inline-block;font:11px/1 ui-monospace,monospace;padding:4px 8px;border-radius:999px;border:1px solid var(--line);color:var(--soft);margin:2px 4px 2px 0}
+  .swatch{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;margin-right:5px;border:1px solid rgba(0,0,0,.08)}
+  .full{grid-column:1/-1}
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  td,th{text-align:left;padding:6px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--soft);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+  .ok{color:var(--green)} .bad{color:#b4452f} .mid{color:var(--orange-d)}
+  .foot{color:var(--soft);font-size:12px;margin-top:26px}
+  .foot a{color:var(--violet)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><em>Papilionanthe</em> Miss Joaquim — anatomical study</h1>
+    <p class="sub">Singapore's national flower (the <em>P.&nbsp;hookeriana</em>&nbsp;×&nbsp;<em>teres</em> hybrid). A schematic study of the real three-dimensional form — flower face, profile (facing direction + spur), and whole-plant habit — drawn to the measured botanical description, to ground the voxel-QR rebuild.</p>
+  </header>
+
+  <div class="grid">
+
+    <!-- ============ FLOWER FACE ============ -->
+    <div class="card">
+      <h2>1 · Flower, front view — resupinate (lip at the bottom)</h2>
+      <svg viewBox="0 0 420 460" aria-label="Miss Joaquim flower, front">
+        <!-- DORSAL SEPAL (top) -->
+        <path d="M210 40 C188 60 188 120 210 150 C232 120 232 60 210 40 Z" fill="var(--violet)" stroke="var(--violet-d)" stroke-width="1.2"/>
+        <path d="M210 52 L210 142" stroke="var(--violet-d)" stroke-width="1.4" opacity=".5"/>
+        <!-- TWO PETALS (upper sides, twisted, the largest tepals) -->
+        <path d="M150 150 C95 120 60 150 70 205 C120 200 160 185 175 158 Z" fill="var(--rose)" stroke="var(--violet-d)" stroke-width="1.1"/>
+        <path d="M270 150 C325 120 360 150 350 205 C300 200 260 185 245 158 Z" fill="var(--rose)" stroke="var(--violet-d)" stroke-width="1.1"/>
+        <!-- twist hint -->
+        <path d="M100 150 C120 160 130 175 132 192" class="lead" opacity=".7"/>
+        <path d="M320 150 C300 160 290 175 288 192" class="lead" opacity=".7"/>
+        <!-- TWO LATERAL SEPALS (lower sides, pale mauve, broader) -->
+        <path d="M150 215 C92 220 70 280 100 320 C150 300 175 255 178 222 Z" fill="var(--mauve)" stroke="var(--mauve-d)" stroke-width="1.1"/>
+        <path d="M270 215 C328 220 350 280 320 320 C270 300 245 255 242 222 Z" fill="var(--mauve)" stroke="var(--mauve-d)" stroke-width="1.1"/>
+        <!-- LIP: side lobes cupping up around the column -->
+        <path d="M178 205 C150 205 150 250 175 262 C190 250 196 225 200 210 Z" fill="var(--rose)" stroke="var(--violet-d)" stroke-width="1"/>
+        <path d="M242 205 C270 205 270 250 245 262 C230 250 224 225 220 210 Z" fill="var(--rose)" stroke="var(--violet-d)" stroke-width="1"/>
+        <!-- LIP: epichile (mid-lobe) — broad notched fan flaring down/forward -->
+        <path d="M175 250
+                 C150 285 160 360 210 410
+                 C260 360 270 285 245 250
+                 C238 300 232 300 226 268
+                 C220 300 214 300 210 268
+                 C206 300 200 300 194 268
+                 C188 300 182 300 175 250 Z"
+              fill="var(--violet)" stroke="var(--violet-d)" stroke-width="1.2"/>
+        <!-- purple speckle over the rose -->
+        <g fill="var(--speck)" opacity=".75">
+          <circle cx="192" cy="300" r="2.2"/><circle cx="210" cy="318" r="2.4"/><circle cx="228" cy="300" r="2.2"/>
+          <circle cx="201" cy="332" r="2"/><circle cx="219" cy="332" r="2"/><circle cx="210" cy="350" r="2.3"/>
+          <circle cx="185" cy="320" r="1.8"/><circle cx="235" cy="320" r="1.8"/>
+        </g>
+        <!-- DISK / THROAT: yellow -> fiery orange with red striation, hairy groove -->
+        <path d="M186 240 C170 258 178 300 210 300 C242 300 250 258 234 240 C224 232 196 232 186 240 Z" fill="var(--orange)" stroke="var(--orange-d)" stroke-width="1"/>
+        <path d="M193 244 C184 256 188 286 210 286 C232 286 236 256 227 244 Z" fill="var(--gold)"/>
+        <g stroke="#c23b22" stroke-width="1.1" opacity=".8">
+          <path d="M205 250 L203 282"/><path d="M210 250 L210 284"/><path d="M215 250 L217 282"/>
+        </g>
+        <!-- COLUMN at the centre, above the throat -->
+        <path d="M201 222 C201 210 219 210 219 222 C219 236 210 244 210 244 C210 244 201 236 201 222 Z" fill="#efe7d6" stroke="#b7a98c" stroke-width="1"/>
+        <circle cx="210" cy="224" r="3.4" fill="#d8c79e" stroke="#b7a98c"/>
+
+        <!-- labels -->
+        <g class="lab">
+          <line class="lead" x1="210" y1="46" x2="300" y2="36"/><circle class="dot" cx="210" cy="46" r="2"/><text x="304" y="39">dorsal sepal · rosy-violet</text>
+          <line class="lead" x1="78" y1="170" x2="14" y2="150"/><circle class="dot" cx="78" cy="170" r="2"/><text x="6" y="143" class="dim">petal (twisted,</text><text x="6" y="156" class="dim">back-to-front)</text>
+          <line class="lead" x1="342" y1="170" x2="372" y2="150"/><circle class="dot" cx="342" cy="170" r="2"/><text x="330" y="143" class="dim">petal · largest</text>
+          <line class="lead" x1="92" y1="290" x2="14" y2="300"/><circle class="dot" cx="92" cy="290" r="2"/><text x="4" y="294" class="dim">lateral sepal</text><text x="4" y="307" class="dim">· pale mauve</text>
+          <line class="lead" x1="328" y1="290" x2="360" y2="300"/><circle class="dot" cx="328" cy="290" r="2"/><text x="330" y="294" class="dim">lateral sepal</text>
+          <line class="lead" x1="244" y1="226" x2="305" y2="218"/><circle class="dot" cx="244" cy="226" r="2"/><text x="308" y="221">column</text>
+          <line class="lead" x1="210" y1="270" x2="312" y2="262"/><circle class="dot" cx="210" cy="270" r="2"/><text x="316" y="258">orange disk + red</text><text x="316" y="271">striation + groove</text>
+          <line class="lead" x1="160" y1="350" x2="40" y2="392"/><circle class="dot" cx="160" cy="350" r="2"/><text x="6" y="388">epichile — notched</text><text x="6" y="401">fan mid-lobe; rose,</text><text x="6" y="414">purple-speckled</text>
+          <line class="lead" x1="170" y1="235" x2="60" y2="232"/><circle class="dot" cx="170" cy="235" r="2"/><text x="6" y="228" class="dim">side lobe</text>
+        </g>
+      </svg>
+    </div>
+
+    <!-- ============ PROFILE ============ -->
+    <div class="card">
+      <h2>2 · Flower, profile — facing direction &amp; spur</h2>
+      <svg viewBox="0 0 420 460" aria-label="Miss Joaquim flower, profile">
+        <!-- pedicel from the spike (back-left) -->
+        <path d="M40 250 C90 250 120 250 150 252" stroke="var(--green)" stroke-width="6" fill="none" stroke-linecap="round"/>
+        <text x="20" y="242" class="lab dim">pedicel</text>
+        <!-- ovary / flower base -->
+        <ellipse cx="165" cy="252" rx="22" ry="16" fill="#cdbfa0" stroke="#a8966f"/>
+        <!-- SPUR: slender, bent, projecting back-down behind the lip -->
+        <path d="M175 268 C170 300 150 320 132 330" stroke="var(--violet-d)" stroke-width="7" fill="none" stroke-linecap="round"/>
+        <text x="86" y="350" class="lab">spur (nectar)</text>
+        <line class="lead" x1="138" y1="328" x2="120" y2="344"/>
+        <!-- dorsal sepal + petals sweeping UP and forward -->
+        <path d="M188 245 C235 175 300 150 350 150 C320 200 270 240 220 250 Z" fill="var(--rose)" stroke="var(--violet-d)" stroke-width="1.1"/>
+        <text x="300" y="135" class="lab dim">dorsal sepal + petals</text>
+        <!-- lateral sepal sweeping down-forward -->
+        <path d="M195 262 C240 300 300 320 350 320 C310 280 260 258 215 256 Z" fill="var(--mauve)" stroke="var(--mauve-d)" stroke-width="1.1"/>
+        <text x="300" y="338" class="lab dim">lateral sepal</text>
+        <!-- LIP projecting FORWARD/down (the landing platform) -->
+        <path d="M198 256 C250 260 320 270 380 290 C350 250 300 232 230 235 C214 236 204 244 198 256 Z" fill="var(--violet)" stroke="var(--violet-d)" stroke-width="1.3"/>
+        <!-- orange throat at lip base -->
+        <path d="M205 250 C220 248 240 250 252 256 C242 266 222 268 208 262 Z" fill="var(--orange)" stroke="var(--orange-d)"/>
+        <text x="300" y="286" class="lab">lip (fan) — the front face</text>
+        <!-- column tucked above throat -->
+        <path d="M206 244 C214 236 226 240 226 250" stroke="#b7a98c" stroke-width="5" fill="none" stroke-linecap="round"/>
+        <!-- facing arrow -->
+        <defs><marker id="ah" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="var(--violet)"/></marker></defs>
+        <path d="M150 410 C260 400 330 380 392 350" stroke="var(--violet)" stroke-width="1.6" fill="none" stroke-dasharray="5 4" marker-end="url(#ah)"/>
+        <text x="150" y="430" class="lab" fill="var(--violet)">flower faces OUTWARD, ≈horizontal, tilted slightly up</text>
+      </svg>
+      <p class="meas" style="margin-top:12px">In the QR toy the face is laid <b>flat, pointing at the sky</b> so it projects to a scannable code — the one deliberate departure from the outward-facing reality (keeps the projection&nbsp;=&nbsp;scan rule intact).</p>
+    </div>
+
+    <!-- ============ WHOLE PLANT ============ -->
+    <div class="card">
+      <h2>3 · Whole plant — climbing habit &amp; raceme</h2>
+      <svg viewBox="0 0 420 460" aria-label="Miss Joaquim whole plant">
+        <!-- support stake -->
+        <line x1="250" y1="40" x2="250" y2="430" stroke="#cbb89a" stroke-width="4" stroke-dasharray="2 5"/>
+        <text x="258" y="60" class="lab dim">vertical support</text>
+        <!-- slender leaning/scrambling stem -->
+        <path d="M150 430 C170 360 210 320 235 270 C255 225 248 150 256 60" stroke="var(--green)" stroke-width="6" fill="none" stroke-linecap="round"/>
+        <!-- aerial roots near base -->
+        <g stroke="#b8a98a" stroke-width="3" fill="none" stroke-linecap="round">
+          <path d="M152 400 C130 412 120 430 118 446"/><path d="M165 372 C150 392 146 412 150 432"/>
+        </g>
+        <text x="40" y="440" class="lab dim">aerial roots</text>
+        <!-- terete leaves: alternating pencil quills, out-and-up -->
+        <g stroke="var(--green-l)" stroke-width="7" fill="none" stroke-linecap="round">
+          <path d="M158 405 C120 395 96 372 84 350"/>
+          <path d="M178 360 C214 352 240 332 256 312"/>
+          <path d="M205 322 C168 318 140 300 122 282"/>
+          <path d="M232 282 C266 278 292 262 308 244"/>
+          <path d="M243 240 C206 238 178 224 160 208"/>
+          <path d="M250 196 C284 194 308 180 322 164"/>
+          <path d="M252 150 C216 150 190 138 172 122"/>
+        </g>
+        <text x="40" y="300" class="lab dim">terete leaves — cylindrical</text>
+        <text x="40" y="313" class="lab dim">pencils, 15–20cm × 4mm,</text>
+        <text x="40" y="326" class="lab dim">alternating, suberect</text>
+        <!-- axillary raceme near the top: a spike with ~4 open flowers + buds, facing outward -->
+        <path d="M256 96 C300 90 340 96 372 110" stroke="var(--green)" stroke-width="4" fill="none"/>
+        <g>
+          <!-- open flowers (simple fan-lip icons) -->
+          <g transform="translate(372,110)"><circle r="13" fill="var(--rose)" stroke="var(--violet-d)"/><circle r="5" fill="var(--orange)"/></g>
+          <g transform="translate(352,92)"><circle r="12" fill="var(--rose)" stroke="var(--violet-d)"/><circle r="4.5" fill="var(--orange)"/></g>
+          <g transform="translate(326,90)"><circle r="11" fill="var(--rose)" stroke="var(--violet-d)"/><circle r="4" fill="var(--orange)"/></g>
+          <g transform="translate(300,92)"><circle r="10" fill="var(--rose)" stroke="var(--violet-d)"/><circle r="3.6" fill="var(--orange)"/></g>
+          <!-- buds toward the tip -->
+          <circle cx="284" cy="98" r="5" fill="var(--mauve)" stroke="var(--mauve-d)"/>
+          <circle cx="276" cy="104" r="4" fill="var(--mauve-d)"/>
+        </g>
+        <text x="300" y="60" class="lab">axillary raceme</text>
+        <text x="300" y="73" class="lab dim">≤12 buds, ~4 open, fan cluster</text>
+        <line class="lead" x1="330" y1="78" x2="330" y2="86"/>
+        <!-- growing tip -->
+        <text x="232" y="44" class="lab dim">growth at tip ↑</text>
+      </svg>
+      <p class="meas" style="margin-top:12px">Flowers are <b>clustered on one apical spike</b> facing outward — not scattered over the whole plant. Blooms only after the stem climbs ~40–50cm above its support (≈1.4–1.5m tall).</p>
+    </div>
+
+    <!-- ============ MEASURED ANATOMY ============ -->
+    <div class="card">
+      <h2>4 · Measured anatomy &amp; colour zones</h2>
+      <p class="meas"><b>Flower:</b> 5cm across × 6cm tall · resupinate · "butterfly orchid" · twisted petals (back faces front)</p>
+      <table>
+        <tr><th>part</th><th>size</th><th>colour</th></tr>
+        <tr><td>dorsal sepal</td><td>20–22 × 20–22mm</td><td><span class="swatch" style="background:var(--violet)"></span>rosy-violet, darker central vein</td></tr>
+        <tr><td>petals (×2)</td><td>25–27 × 25–27mm</td><td><span class="swatch" style="background:var(--rose)"></span>rosy-violet, spatulate, twisted</td></tr>
+        <tr><td>lateral sepals (×2)</td><td>27 × 20mm</td><td><span class="swatch" style="background:var(--mauve)"></span>pale mauve, broader</td></tr>
+        <tr><td>lip · side lobes</td><td>20 × 14mm, triangular–elliptic</td><td><span class="swatch" style="background:var(--rose)"></span>pink, orange-striated to yellow base</td></tr>
+        <tr><td>lip · epichile (mid)</td><td>spatulate, 4 overlapping lobes, ~6mm deep</td><td><span class="swatch" style="background:var(--violet)"></span>magenta-rose, yellow base, red speckle</td></tr>
+        <tr><td>disk / callus</td><td>~9 × 6mm, hairy groove</td><td><span class="swatch" style="background:var(--gold)"></span>yellow → <span class="swatch" style="background:var(--orange)"></span>fiery orange, red striation</td></tr>
+        <tr><td>spur</td><td>slender, bent/curved</td><td><span class="swatch" style="background:var(--violet-d)"></span>behind lip base (profile only)</td></tr>
+      </table>
+      <p class="meas" style="margin-top:14px"><b>Plant:</b> monopodial climber · stem ~5mm · tip-growth · 1.4–1.5m before bloom<br>
+      <b>Leaves:</b> terete, 15–20cm × 4mm, alternating, suberect/curved<br>
+      <b>Raceme:</b> axillary, 15–30cm, ≤12 buds, ~4 open, loose, fan-shaped, outward-facing</p>
+    </div>
+
+    <!-- ============ MODELLING IMPLICATIONS ============ -->
+    <div class="card full">
+      <h2>5 · What this means for the voxel-QR rebuild (v2 → v3)</h2>
+      <table>
+        <tr><th>anatomical truth</th><th>v2 today</th><th>v3 fix</th></tr>
+        <tr><td><b>Lip is trilobed</b>: 2 side lobes cupping a column + a notched ~4-lobe fan epichile</td><td class="mid">single smooth front arc</td><td>carve the fan edge into 3–4 lobes; raise 2 side-lobe nubs around a tiny column</td></tr>
+        <tr><td><b>Tepals are differentiated</b>: dorsal sepal up, 2 large twisted petals upper, 2 pale-mauve sepals lower</td><td class="mid">"petal hood" + side sepals, undifferentiated</td><td>place a dorsal sepal opposite the lip, 2 distinct upper petals, 2 paler lower sepals</td></tr>
+        <tr><td><b>Raceme</b>: ~4 flowers clustered on one apical spike, outward-facing, + buds</td><td class="bad">2–3 blooms scattered over light patches mid-plant</td><td>cluster blooms on a spike near the top; add 1–2 mauve buds toward the tip</td></tr>
+        <tr><td><b>Orange disk</b> is a small central eye with a hairy groove + red striation</td><td class="ok">orange eye + violet speckle ✓ (close)</td><td>add a yellow innermost core + faint red striae lines</td></tr>
+        <tr><td><b>Climbing habit</b>: slender tip-growing stem, often staked</td><td class="ok">slim leaning cane ✓</td><td>keep; optional faint stake; concentrate leaves lower, flowers up top</td></tr>
+        <tr><td><b>Terete leaves</b>: long cylindrical quills, alternating</td><td class="ok">slim pencils ✓</td><td>keep; ensure they read as round in iso</td></tr>
+      </table>
+    </div>
+
+  </div>
+
+  <p class="foot">Sources: <a href="https://onlinelibrary.wiley.com/doi/full/10.1111/curt.70012">Curtis's Botanical Magazine 1141 — Papilionanthe Miss Joaquim 'Agnes'</a> (measured floral description) · <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC9477820/">Genome paper, PMC9477820</a> (habit, tip-growth, 1.4–1.5m) · <a href="https://en.wikipedia.org/wiki/Papilionanthe_Miss_Joaquim">Wikipedia</a> (5×6cm, twisted petals, fan lip, ≤12 buds / ~4 open) · <a href="https://www.orchidspecies.com/papiteres.htm">orchidspecies — P. teres</a> (terete leaf 15–20cm×4mm, axillary raceme) · <a href="https://www.botanicohub.com/plant-families/orchidaceae/genera/papilionanthe">Papilionanthe genus</a> &amp; resupination/spur references. Schematic, drawn to the measured description — not a photograph.</p>
+</div>
+</body>
+</html>
