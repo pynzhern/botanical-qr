@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Botanical QR · compare</title>
+<style>
+  :root { --surface: #f7f7f6; --ink: #111; --ink-3: rgba(17,17,17,0.6); --rule: rgba(17,17,17,0.12); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--surface); font-family: Inter, -apple-system, system-ui, sans-serif; color: var(--ink); }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; height: 100%; padding: 12px; }
+  figure { margin: 0; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  figcaption { font-weight: 500; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); padding: 0 0 8px; }
+  iframe { flex: 1; width: 100%; border: 1px solid var(--rule); background: var(--surface); }
+</style>
+</head>
+<body>
+  <div class="pair">
+    <figure><figcaption>botanical-qr.html (current)</figcaption><iframe src="botanical-qr.html" title="current page"></iframe></figure>
+    <figure><figcaption>botanical-qr-site-v1.html (new)</figcaption><iframe src="botanical-qr-site-v1.html" title="new page"></iframe></figure>
+  </div>
+</body>
+</html>
