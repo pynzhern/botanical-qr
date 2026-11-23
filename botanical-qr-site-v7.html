@@ -87,7 +87,7 @@
        band of the page surface across the full width under the title, closed by one hairline */
     .about { --about-top: calc(max(22px, env(safe-area-inset-top)) + 44px);
       pointer-events: auto; position: fixed; top: var(--about-top); z-index: 4;
-      right: max(var(--gutter), env(safe-area-inset-right)); width: 268px; text-align: right;
+      right: max(var(--gutter), env(safe-area-inset-right)); width: 300px; text-align: right;
       max-height: calc(100vh - var(--about-top) - var(--strip-h) - 12px); overflow-y: auto; overscroll-behavior: contain;
       opacity: 0; visibility: hidden; transition: opacity var(--dur) var(--spring), visibility var(--dur); }
     @supports (height: 100dvh) { .about { max-height: calc(100dvh - var(--about-top) - var(--strip-h) - 12px); } }
@@ -101,6 +101,7 @@
     .about p { font-size: 12.5px; line-height: 1.55; color: var(--ink-2); margin: 0 0 14px; }
     .about .hint { color: var(--ink-3); margin: 0 0 3px; }
     .about .hint:last-child { margin: 10px 0 0; }
+    @media (min-width: 721px) { .about .hint { white-space: nowrap; } }
 
     /* stacked pyn/zhern signature: ink, in the left margin at the middle of the room above the strip */
     .page-mark { position: fixed; left: var(--gutter); top: calc((100% - var(--strip-h)) / 2); transform: translateY(-50%);
