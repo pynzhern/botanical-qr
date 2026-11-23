@@ -1,4 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "rewrites": [{ "source": "/(.*)", "destination": "/botanical-qr-site-v6.html" }]
+  "rewrites": [{ "source": "/(.*)", "destination": "/botanical-qr-site-v9.html" }]
 }

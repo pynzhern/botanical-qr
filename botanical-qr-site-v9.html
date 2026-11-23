@@ -1,0 +1,1579 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Botanical QR · scannable plants</title>
+  <meta name="description" content="The top-down view is a real, scannable QR code; tilt it and a 3D plant grows from the same pixels." />
+  <meta name="theme-color" content="#f7f7f6" />
+
+  <!-- favicons: the pynzhern.com set, recoloured green -->
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+
+  <!-- open graph / twitter share card -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://botanicals.pynzhern.com/" />
+  <meta property="og:site_name" content="pynzhern" />
+  <meta property="og:title" content="Botanical QR · scannable plants" />
+  <meta property="og:description" content="The top-down view is a real, scannable QR code; tilt it and a 3D plant grows from the same pixels." />
+  <meta property="og:image" content="https://botanicals.pynzhern.com/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="twitter:card" content="summary_large_image" />
+  <meta property="twitter:title" content="Botanical QR · scannable plants" />
+  <meta property="twitter:description" content="The top-down view is a real, scannable QR code; tilt it and a 3D plant grows from the same pixels." />
+  <meta property="twitter:image" content="https://botanicals.pynzhern.com/og-image.png" />
+
+  <!-- fonts: the same Garamond and Inter families and weights as pynzhern.com, non-blocking; fallbacks below if offline -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript><link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
+  <style>
+    /* metric matched stand-ins, as on the portfolio: text sets in a scaled local face until the web fonts arrive */
+    @font-face { font-family: 'Inter Fallback'; font-weight: 400; src: local('Arial'); size-adjust: 106.7%; ascent-override: 90.8%; descent-override: 22.6%; line-gap-override: 0%; }
+    @font-face { font-family: 'Inter Fallback'; font-weight: 500; src: local('Arial'); size-adjust: 107.9%; ascent-override: 89.8%; descent-override: 22.3%; line-gap-override: 0%; }
+    @font-face { font-family: 'EB Garamond Fallback'; font-style: normal; font-weight: 400; src: local('Georgia'); size-adjust: 84.5%; ascent-override: 119.2%; descent-override: 35.3%; line-gap-override: 0%; }
+    @font-face { font-family: 'EB Garamond Fallback'; font-style: italic; font-weight: 400; src: local('Georgia Italic'), local('Georgia-Italic'); size-adjust: 81.6%; ascent-override: 123.4%; descent-override: 36.5%; line-gap-override: 0%; }
+
+    :root {
+      --surface: #f7f7f6;
+      --ink: #111111; --ink-2: rgba(17,17,17,0.74); --ink-3: rgba(17,17,17,0.6); --rule: rgba(17,17,17,0.12);
+      --font-body: 'Inter', 'Inter Fallback', -apple-system, system-ui, sans-serif;
+      --font-serif: 'EB Garamond', 'EB Garamond Fallback', Georgia, serif;
+      --label-size: 10.5px; --label-track: 0.12em;
+      --gutter: clamp(16px, 4vw, 56px);
+      --footer-h: calc(56px + env(safe-area-inset-bottom, 0px));
+      --strip-h: 56px;                     /* written by the page script: the measured height of the bottom strip */
+      --dur: 675ms;
+      /* the portfolio's single spring (period 0.5s, no bounce), sampled as css linear() */
+      --spring: linear(0, 0.158, 0.413, 0.626, 0.774, 0.868, 0.925, 0.958, 0.977, 0.987, 0.993, 0.996, 1);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: var(--surface); }
+    body { font-family: var(--font-body); color: var(--ink); -webkit-font-smoothing: antialiased; }
+    /* the canvas fills the window above the strip, so the plant centres in the room that is left */
+    #app { position: fixed; left: 0; right: 0; top: 0; bottom: var(--strip-h); }
+    canvas { display: block; touch-action: none; }
+    button { -webkit-tap-highlight-color: transparent; }
+
+    /* the one small-label style: Inter 500, capitals, tracked */
+    .label, .menu button, #toggle, #saveBtn, #aboutBtn, .about .hint {
+      font-family: var(--font-body); font-weight: 500; font-size: var(--label-size); line-height: 16px;
+      letter-spacing: var(--label-track); text-transform: uppercase; }
+    button { margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; cursor: pointer;
+      color: var(--ink-2); transition: color var(--dur) var(--spring); }
+    button:hover, button[aria-expanded="true"] { color: var(--ink); }
+    button:focus-visible, input:focus-visible { outline: 1px solid var(--ink); outline-offset: 4px; }
+    button:focus:not(:focus-visible), input:focus:not(:focus-visible) { outline: none; }
+    button:disabled { color: var(--ink-3); cursor: default; }
+
+    .hud { position: fixed; left: 0; top: 0; right: 0; pointer-events: none;
+      padding: max(22px, env(safe-area-inset-top)) max(var(--gutter), env(safe-area-inset-right)) 0 max(var(--gutter), env(safe-area-inset-left)); }
+
+    /* name, about label, about text */
+    .top { display: flex; flex-direction: column; align-items: flex-start; }
+    .brand { pointer-events: auto; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+    .mark { font-family: var(--font-serif); font-weight: 400; font-size: 20px; line-height: 1.1; letter-spacing: 0; color: var(--ink); }
+    /* site-v4: about sits in the top right corner, away from the title; its text opens beneath it */
+    #aboutBtn { position: fixed; z-index: 3; text-align: left; top: calc(max(22px, env(safe-area-inset-top)) + 8px);
+      right: max(var(--gutter), env(safe-area-inset-right)); }
+    #aboutBtn::before { content: ''; position: absolute; inset: -14px -10px -14px -4px; }
+    /* site-v7: no box. on wide windows the text is set straight on the page, right aligned under its label, in a
+       narrow column where the plant never reaches. on phones, where the plant fills the screen, it becomes a plain
+       band of the page surface across the full width under the title, closed by one hairline */
+    .about { --about-top: calc(max(22px, env(safe-area-inset-top)) + 44px);
+      pointer-events: auto; position: fixed; top: var(--about-top); z-index: 4;
+      right: max(var(--gutter), env(safe-area-inset-right)); width: 300px; text-align: right;
+      max-height: calc(100vh - var(--about-top) - var(--strip-h) - 12px); overflow-y: auto; overscroll-behavior: contain;
+      opacity: 0; visibility: hidden; transition: opacity var(--dur) var(--spring), visibility var(--dur); }
+    @supports (height: 100dvh) { .about { max-height: calc(100dvh - var(--about-top) - var(--strip-h) - 12px); } }
+    @media (max-width: 720px) {
+      .about { left: 0; right: 0; width: auto; text-align: left; background: var(--surface);
+        border-bottom: 1px solid var(--rule);
+        padding: 14px max(var(--gutter), env(safe-area-inset-right)) 14px max(var(--gutter), env(safe-area-inset-left)); }
+    }
+    .about.open { opacity: 1; visibility: visible; }
+    .about .lead { font-family: var(--font-serif); font-size: 20px; line-height: 1.25; color: var(--ink); margin: 0 0 8px; }
+    .about p { font-size: 12.5px; line-height: 1.55; color: var(--ink-2); margin: 0 0 6px; }
+    /* site-v8: the how-to is one quiet sentence in the body style, no capitals; the credit line is gone */
+    .about .how { color: var(--ink-3); margin: 0; }
+    .about .hint { color: var(--ink-3); margin: 0 0 3px; }
+    .about .hint:last-child { margin: 10px 0 0; }
+    @media (min-width: 721px) { .about .hint { white-space: nowrap; } }
+
+    /* stacked pyn/zhern signature: ink, in the left margin at the middle of the room above the strip */
+    .page-mark { position: fixed; left: var(--gutter); top: calc((100% - var(--strip-h)) / 2); transform: translateY(-50%);
+      width: 52px; height: auto; pointer-events: none; user-select: none; z-index: 2; }
+    @media (max-width: 720px), (max-height: 560px) { .page-mark { display: none; } }
+
+    /* the strip: plain page surface across the bottom, words in a row */
+    .dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; pointer-events: auto;
+      min-height: var(--footer-h); padding: 0 max(var(--gutter), env(safe-area-inset-right)) env(safe-area-inset-bottom, 0px) max(var(--gutter), env(safe-area-inset-left));
+      background: var(--surface); display: flex; align-items: center; gap: 36px; }
+    .seg { display: flex; gap: 22px; flex: none; }
+    .seg button { font-family: var(--font-serif); font-size: 15px; line-height: 24px; letter-spacing: 0; text-transform: lowercase;
+      white-space: nowrap; position: relative; }
+    .seg button::before { content: ''; position: absolute; inset: -8px -4px; }
+    .seg button.on { color: var(--ink); }
+    .seg button:disabled { color: var(--ink-3); }
+    .seg button.on:disabled { color: var(--ink); }
+
+    input { font-family: var(--font-body); font-size: 12px; line-height: 20px; color: var(--ink); background: transparent; border: 0;
+      border-bottom: 1px solid var(--rule); border-radius: 0; padding: 5px 0; flex: 1 1 200px; min-width: 120px; max-width: 320px; outline: none;
+      -webkit-appearance: none; appearance: none; transition: border-color var(--dur) var(--spring); }
+    input:hover, input:focus { border-bottom-color: var(--ink); }
+    /* iOS Safari zooms inputs under 16px on focus; raise on touch devices only */
+    @media (pointer: coarse) { input { font-size: 16px; } }
+    input::placeholder { color: var(--ink-3); opacity: 1; }
+
+    .actions { display: flex; align-items: center; gap: 28px; margin-left: auto; flex: none; }
+    #toggle, #saveBtn { position: relative; white-space: nowrap; display: inline-flex; align-items: center; }
+    /* site-v2: the two actions are line icons; their names live in aria-label and title */
+    .ico { width: 18px; height: 18px; display: block; fill: none; stroke: currentColor; stroke-width: 1.25;
+      stroke-linecap: round; stroke-linejoin: round; }
+    #toggle .ico-grow, #toggle[data-state="flat"] .ico-flat { display: none; }
+    #toggle[data-state="flat"] .ico-grow { display: block; }
+    #toggle::before, #saveBtn::before { content: ''; position: absolute; inset: -14px -6px; }
+
+    /* site-v3 save choices: no panel. the three formats appear as words in the strip, left of the save icon */
+    .menu-wrap { display: flex; align-items: center; }
+    .menu { order: -1; display: flex; align-items: center; gap: 20px; width: 0; overflow: hidden;
+      opacity: 0; visibility: hidden; transition: opacity var(--dur) var(--spring), visibility var(--dur); }
+    .menu.open { width: auto; overflow: visible; margin-right: 24px; opacity: 1; visibility: visible; }
+    .menu button { position: relative; color: var(--ink-3); }
+    .menu button:hover, .menu button:focus-visible { color: var(--ink); }
+    .menu button::before { content: ''; position: absolute; inset: -14px -8px; }
+
+    /* recording overlay: covers the frozen live view and shows the square loop being captured
+       (the export canvas must be on-screen for Safari to capture its stream) */
+    #recOverlay { position: fixed; inset: 0; z-index: 40; display: none; flex-direction: column;
+      align-items: center; justify-content: center; gap: 16px; background: var(--surface); }
+    #recOverlay.on { display: flex; }
+    #recOverlay canvas { width: auto; height: 84vmin; max-width: 92vmin; }
+    /* progress: a 1px ink line, no text */
+    #recBar { width: clamp(200px, 40vmin, 340px); height: 1px; background: var(--rule); overflow: hidden; }
+    #recBar > i { display: block; height: 100%; width: 0%; background: var(--ink); transition: width 0.18s linear; }
+    /* indeterminate sweep while the gif encoder lib loads (before real progress starts) */
+    #recBar.indet > i { width: 38%; transition: none; animation: recIndet 1.05s ease-in-out infinite; }
+    @keyframes recIndet { 0% { margin-left: -38%; } 100% { margin-left: 100%; } }
+
+    #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none;
+      font-family: var(--font-body); font-weight: 500; font-size: var(--label-size); letter-spacing: var(--label-track);
+      text-transform: uppercase; color: var(--ink-2); transition: opacity 0.4s; }
+    #loading.gone { opacity: 0; }
+
+    /* narrower windows: the strip takes two rows, plant words first, the field and the two actions below */
+    @media (max-width: 1060px) {
+      .dock { flex-wrap: wrap; row-gap: 0; column-gap: 20px; padding-top: 4px; padding-bottom: max(6px, env(safe-area-inset-bottom)); }
+      .seg { flex: 1 0 100%; gap: 24px; overflow-x: auto; scrollbar-width: none; padding: 8px 4px; margin: 0 -4px; }
+      .seg::-webkit-scrollbar { display: none; }
+      .seg button { min-height: 44px; }
+      input { min-height: 44px; flex: 1 1 120px; max-width: none; padding: 12px 0 8px; }
+      .actions { gap: 4px; }
+      #toggle, #saveBtn { min-height: 44px; padding: 0 10px; }
+      #toggle::before, #saveBtn::before { inset: 0; }
+      .menu { gap: 14px; }
+      .menu.open { margin: 0 8px 0 10px; }
+      .menu button { min-height: 44px; }
+    }
+    @media (max-width: 720px) {
+      .mark { font-size: 18px; }
+      .hud { padding-top: max(14px, env(safe-area-inset-top)); }
+    }
+    @media (prefers-reduced-motion: reduce) { button, input, .about, .menu { transition: none; } }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="loading">growing…</div>
+  <img id="pageMark" class="page-mark" alt="" aria-hidden="true" />
+  <div class="hud">
+    <div class="top">
+      <div class="brand">
+        <span class="mark">Botanical QR</span>
+        <button id="aboutBtn" aria-expanded="false" aria-controls="aboutCard">about</button>
+      </div>
+      <div class="about" id="aboutCard" role="region" aria-label="about Botanical QR">
+        <p class="lead">Scannable plants.</p>
+        <p>The top-down view is a real, scannable QR code; tilt it and a 3D plant grows from the same pixels.</p>
+        <p class="how">Drag to spin. Tap the plant to flatten or grow.</p>
+      </div>
+    </div>
+  </div>
+  <div class="dock" id="dock" role="group" aria-label="controls">
+    <span class="seg" id="plantSeg" role="group" aria-label="choose plant">
+      <button data-model="caladium-h" class="on" aria-pressed="true">caladium</button>
+      <button data-model="frangipani" aria-pressed="false">frangipani</button>
+      <button data-model="pitcher" aria-pressed="false">pitcher</button>
+      <button data-model="pine" data-season="forest" aria-pressed="false">forest pine</button>
+      <button data-model="pine" data-season="snow" aria-pressed="false">snow pine</button>
+    </span>
+    <input id="content" type="url" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="QR content URL" placeholder="https://your-link" />
+    <div class="actions">
+      <button id="toggle" data-state="grown" aria-label="flatten to QR" title="flatten to QR">
+        <svg class="ico ico-flat" viewBox="0 0 18 18" aria-hidden="true"><rect x="2.5" y="2.5" width="5" height="5"/><rect x="10.5" y="2.5" width="5" height="5"/><rect x="2.5" y="10.5" width="5" height="5"/><path d="M10.5 10.5h2v2h-2zM15.5 10.5v2M13 15.5h2.5v-1M10.5 15.5v-.5"/></svg>
+        <svg class="ico ico-grow" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 2 15 5.5v7L9 16l-6-3.5v-7zM3 5.5 9 9l6-3.5M9 9v7"/></svg>
+      </button>
+      <div class="menu-wrap">
+        <button id="saveBtn" aria-haspopup="true" aria-expanded="false" aria-label="save" title="save">
+          <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 2.5v9M5.5 8 9 11.5 12.5 8M3 15.5h12"/></svg>
+        </button>
+        <div class="menu" id="saveMenu" role="menu" aria-label="save as">
+          <button data-act="png" role="menuitem" aria-label="save QR as PNG" title="save QR">PNG</button>
+          <button data-act="mp4" role="menuitem" aria-label="save loop as video" title="save loop">video</button>
+          <button data-act="gif" role="menuitem" aria-label="save loop as GIF" title="save loop">GIF</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="recOverlay"><div id="recBar"><i></i></div></div>
+
+  <script type="importmap">
+  { "imports": { "three": "https://esm.sh/three@0.160.0" } }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three'
+    import QRCode from 'https://esm.sh/qrcode@1.5.3'
+
+    const CUBE = 1
+    const DEFAULT_CONTENT = 'https://pynzhern.com'
+
+    // ======================================================================
+    // shared QR helper — only LUMINANCE is read by scanners, so any hue works
+    // as a module as long as dark stays dark and light stays light.
+    // ======================================================================
+    function toMatrix(data) {
+      const size = data.modules.size, matrix = []
+      for (let y = 0; y < size; y++) { const row = []; for (let x = 0; x < size; x++) row.push(data.modules.get(x, y) === 1); matrix.push(row) }
+      return matrix
+    }
+    function qrMatrix(content, opts) {
+      let data
+      try { data = QRCode.create(content || DEFAULT_CONTENT, opts) }
+      catch (e) { data = QRCode.create(content || DEFAULT_CONTENT, { errorCorrectionLevel: opts.errorCorrectionLevel }) }
+      return toMatrix(data)
+    }
+    // DEAD-ZONE SKIP: certain QR versions don't decode when a plant sits over the code centre — at some versions the
+    // soft palette goes marginal at that module size (contrast dead-zones, e.g. v15/16/19), at others the canopy occludes
+    // structure the error-correction can't recover (structural, e.g. v23). All are at 360+ char URLs. This picks the
+    // smallest version ≥ minVer that FITS the content and is NOT a dead-zone — bypassing qrMatrix's auto-version fallback
+    // (which silently lands on the bad version). Realistic URLs sit well below the first dead-zone, so they're untouched.
+    function qrMatrixSafe(content, ec, minVer, deadSet) {
+      const c = content || DEFAULT_CONTENT
+      for (let v = minVer; v <= 40; v++) {
+        if (deadSet.has(v)) continue
+        try { return toMatrix(QRCode.create(c, { errorCorrectionLevel: ec, version: v })) } catch (e) { /* content overflows v → try the next */ }
+      }
+      return qrMatrix(c, { errorCorrectionLevel: ec }) // unreachable for any realistic length
+    }
+
+    // ======================================================================
+    // CALADIUM — climbing golden-angle spiral of heart leaves. Every leaf cell
+    // is coloured by the module beneath it: exposed tops carry the real QR, the
+    // rest is a matching "mock" mottle so the whole plant reads as one variegated
+    // thing. Leaves are scaled (never clipped) to fan out to the square edge.
+    // ======================================================================
+    const CAL = (() => {
+      const CREAM = '#f3e7ea'
+      const FLOOR_DARK = '#566159'
+      const CREAM_C = new THREE.Color(CREAM)
+      const FLOOR_DARK_C = new THREE.Color(FLOOR_DARK)
+      const STALK_DARK = new THREE.Color('#587a3f')
+      const GREEN_PALE = new THREE.Color('#d2e2cd')
+      // unified variegation: midrib → blade → vein → green band → margin, on every leaf.
+      // tuned for DECODE CONTRAST: every dark-module tone sits ≲90 luminance, every light-module tone ≳180, so the
+      // binariser separates them cleanly even across the dense central rosette (deeper magenta veining reads as a
+      // more vibrant caladium, not a decode liability).
+      const ZD = { midrib: new THREE.Color('#7a2547'), blade: new THREE.Color('#94375a'), vein: new THREE.Color('#8a3f59'), gband: new THREE.Color('#45692f'), margin: new THREE.Color('#3a6630') } // dark module
+      const ZL = { midrib: new THREE.Color('#e29cc0'), blade: new THREE.Color('#ecb6d0'), vein: new THREE.Color('#f3ddea'), gband: new THREE.Color('#c2dab2'), margin: new THREE.Color('#b3cda6') } // light module
+      const ZN = { midrib: new THREE.Color('#9c3d63'), blade: new THREE.Color('#c9608a'), vein: new THREE.Color('#f3e6ec'), gband: new THREE.Color('#5f8f48'), margin: new THREE.Color('#3f6e34') } // occluded
+      const POT_R = 8.5, POT_H = 11
+      const POT_BODY = new THREE.Color('#c0744d')
+      const POT_RIM = new THREE.Color('#d98f63')
+      const POT_SOIL = new THREE.Color('#4f3b2a')
+      const CAL_DEAD = new Set([15, 19, 23]) // QR versions that don't decode under the rosette (all at 360+ char URLs)
+
+      function pseudoRandom(a, b, seed) { const s = Math.sin(a * 127.1 + b * 311.7 + seed * 43.7) * 43758.5; return s - Math.floor(s) }
+      function frac(x) { return x - Math.floor(x) }
+      function heart(u, v) { const x = u * 1.2, y = 1.2 - v * 2.4; const a = x * x + y * y - 1; return a * a * a - x * x * y * y * y <= 0 }
+      function leafZone(u, v, e1, e2) {
+        if (e1 || e2) return 'margin'
+        const t = Math.abs(u)
+        if (t < 0.07) return 'midrib'
+        if (t > 0.8) return 'gband'  // pink blade reaches most of the leaf; slim green rim (was 0.68)
+        if (frac(t * 4 - v * 1.6) < 0.09) return 'vein'
+        return 'blade'
+      }
+      function pushCell(onOut, offOut, col, row, H, offset, zone, gridSize) {
+        const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
+        if (onTile) onOut.push({ col, row, H, zone })
+        else offOut.push({ x: col - offset, y: H, z: row - offset, color: ZN[zone] })
+      }
+      function pushStalk(onOut, offOut, wx, wy, wz, matrix, offset, gridSize) {
+        const col = Math.round(wx + offset), row = Math.round(wz + offset)
+        const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
+        if (onTile) onOut.push({ col, row, H: wy, color: matrix[row][col] ? STALK_DARK : GREEN_PALE, fixed: true })
+        else offOut.push({ x: col - offset, y: wy, z: row - offset, color: GREEN_PALE })
+      }
+      function buildLeaf(onOut, offOut, leaf, matrix, offset, gridSize, potH) {
+        const { cx, cz, az, size, baseH, rise, droop, cup } = leaf
+        const ca = Math.cos(az), sa = Math.sin(az)
+        const du = 1 / size, dv = 1 / (size * 1.7)
+        const ext = Math.ceil(size * 2.4)
+        const ccol = Math.round(cx + offset), crow = Math.round(cz + offset)
+        let lmaxY = baseH
+        const sSteps = Math.ceil(Math.hypot(cx, cz) + Math.abs(baseH - potH)) + 1
+        for (let s = 0; s <= sSteps; s++) {
+          const f = s / sSteps
+          pushStalk(onOut, offOut, cx * f, potH + (baseH - potH) * f, cz * f, matrix, offset, gridSize)
+        }
+        for (let col = ccol - ext; col <= ccol + ext; col++) {
+          for (let row = crow - ext; row <= crow + ext; row++) {
+            const dx = (col - offset) - cx, dz = (row - offset) - cz
+            const lz = dx * ca + dz * sa, lx = -dx * sa + dz * ca
+            const u = lx / size, v = lz / (size * 1.7)
+            if (v < 0 || v > 1 || u < -1 || u > 1) continue
+            if (!heart(u, v)) continue
+            const e1 = !heart(u + du, v) || !heart(u - du, v) || !heart(u, v + dv) || !heart(u, v - dv)
+            const e2 = !heart(u + 2 * du, v) || !heart(u - 2 * du, v) || !heart(u, v + 2 * dv) || !heart(u, v - 2 * dv)
+            const zone = leafZone(u, v, e1, e2)
+            const H = baseH + v * rise - droop * v * v - cup * u * u
+            pushCell(onOut, offOut, col, row, Math.max(potH, H), offset, zone, gridSize)
+            if (H > lmaxY) lmaxY = H
+          }
+        }
+        return lmaxY
+      }
+      function buildPot(out, potR, potH) {
+        for (let ly = 0; ly < potH; ly++) {
+          const rOut = potR * (0.7 + 0.3 * ly / (potH - 1))
+          const rIn = rOut - 1.6
+          const rim = ly === potH - 1
+          const m = Math.ceil(potR)
+          for (let x = -m; x <= m; x++) for (let z = -m; z <= m; z++) {
+            const d = Math.hypot(x, z)
+            if (d <= rOut && d >= rIn) out.push({ x, y: ly, z, color: rim ? POT_RIM : POT_BODY })
+          }
+        }
+        // soil a layer below the rim → visible terracotta lip, filled up to the wall so there's no see-through
+        const mf = Math.ceil(potR)
+        const soilTop = potH - 2
+        for (let ly = soilTop; ly >= Math.max(0, soilTop - 2); ly--) {
+          const rFill = potR * (0.7 + 0.3 * ly / (potH - 1)) - 1.1
+          for (let x = -mf; x <= mf; x++) for (let z = -mf; z <= mf; z++) {
+            if (Math.hypot(x, z) <= rFill) out.push({ x, y: ly, z, color: POT_SOIL })
+          }
+        }
+      }
+
+      function build(content, ec) {
+        // level M (not H): error-correction H forced a HIGHER version for longer URLs → finer modules → green speckling
+        // the leaves + marginal decode. M fits the same URL in a COARSER, cleaner, more scannable version (a 250-char URL
+        // is v11 not v15+); short URLs stay v9. Plus a dead-zone skip (v15/19/23 don't decode under the rosette).
+        const matrix = ec === 'H'
+          ? qrMatrixSafe(content, 'M', 9, CAL_DEAD)
+          : qrMatrix(content, { errorCorrectionLevel: 'M' })
+        const gridSize = matrix.length
+        const offset = (gridSize - 1) / 2
+
+        const groundCells = []
+        let dark = 0, total = 0
+        for (let row = 0; row < gridSize; row++) for (let col = 0; col < gridSize; col++) {
+          const isDark = matrix[row][col]; total++; if (isDark) dark++
+          groundCells.push({ x: col - offset, y: 0, z: row - offset, color: isDark ? FLOOR_DARK_C : CREAM_C })
+        }
+
+        const sc = gridSize / 33
+        const potR = POT_R * sc, potH = Math.max(4, Math.round(POT_H * sc))
+        const potCells = []
+        buildPot(potCells, potR, potH)
+
+        const leaves = [], overhang = []
+        // per-URL seeded RNG (FNV hash of the whole matrix → LCG) so each caladium is a GENUINELY different rosette —
+        // not just a rotation of one spiral. it varies leaf COUNT, the angular SPACING (jittered off the golden angle
+        // so the arrangement itself differs), the spiral TIGHTNESS, overall CLIMB, and per-leaf SIZE/droop.
+        let hsh = 2166136261 >>> 0
+        for (let r = 0; r < gridSize; r++) for (let c = 0; c < gridSize; c++) { hsh ^= matrix[r][c] ? 1 : 0; hsh = (hsh * 16777619) >>> 0 }
+        let rs = (hsh >>> 0) || 1
+        const rnd = () => { rs = (rs * 1664525 + 1013904223) >>> 0; return rs / 4294967296 }
+        // TALL climbing spiral (the original vertical pz likes): leaves spaced up a tall stalk, evenly enough that
+        // they can TOUCH on the flat surface but never INTERSECT in 3D. the golden angle does the heavy lifting —
+        // consecutive leaves sit ~137° apart so their blades point different ways; a modest jitter randomises the
+        // spread without collapsing that separation, and the tall even climb keeps each leaf clearly above the last.
+        const N = 9 + Math.floor(rnd() * 3)                  // 9–11 leaves
+        const GOLDEN = 2.39996323
+        const MAX_TILT = 1.4
+        const a0 = rnd() * Math.PI * 2                       // random start angle
+        const spin = GOLDEN * (0.94 + rnd() * 0.12)          // ≈ true golden (keeps consecutive leaves well separated) + slight per-plant tightness
+        const climbMul = 0.9 + rnd() * 0.4                   // per-plant overall HEIGHT of the climb
+        const sizeScale = 0.85 + rnd() * 0.3                 // overall leaf size (per-plant)
+        let az = a0
+        const defs = []
+        for (let k = 0; k < N; k++) {
+          az += spin + (rnd() - 0.5) * 0.5                   // modest random spread — looser than a rigid spiral, but golden separation holds
+          const t = N > 1 ? k / (N - 1) : 0
+          defs.push({
+            az, rc: (0.9 + rnd() * 2.0) * sc, climbH: (3 + t * 30 * climbMul + (rnd() - 0.5) * 3) * sc,   // TALL even climb → vertical, leaves spaced up the stalk, no bunching
+            size: (9 + t * 2.5 + rnd() * 3) * sc * sizeScale, rise: (8 + rnd() * 5) * sc, droop: (3 + rnd() * 3) * sc, cup: (3 + rnd() * 2.5) * sc
+          })
+        }
+        // per-leaf fit: SHRINK any leaf that would overhang the square, but only mildly GROW small ones (cap 1.4×).
+        // capping the growth stops leaves ballooning into one solid disc — ground peeks between them, so the centre
+        // alignment patterns stay visible (robust decode) and the gaps read as a more scattered, organic rosette.
+        const S = gridSize * 0.5 - 0.3
+        let maxY = 0, maxR = 0
+        for (const d of defs) {
+          const cA = Math.abs(Math.cos(d.az)), sA = Math.abs(Math.sin(d.az))
+          const reach = d.rc + d.size * 1.7, lat = d.size * 0.85
+          const bx = reach * cA + lat * sA, bz = reach * sA + lat * cA
+          const f = Math.min(1.8, S / Math.max(bx, bz))
+          const rc = d.rc * f, size = d.size * f
+          const baseH = potH + Math.max(d.climbH, rc / MAX_TILT)
+          const leaf = { cx: Math.cos(d.az) * rc, cz: Math.sin(d.az) * rc, az: d.az, size, baseH, rise: d.rise, droop: d.droop, cup: d.cup * f }
+          const ly = buildLeaf(leaves, overhang, leaf, matrix, offset, gridSize, potH)
+          if (ly > maxY) maxY = ly
+          const rr = rc + size * 1.7; if (rr > maxR) maxR = rr
+        }
+        if (potR > maxR) maxR = potR
+
+        // colour every on-tile leaf cell by its module → exposed tops = real QR, the rest = matching mottle
+        const leafCells = []
+        for (const v of leaves) {
+          const color = v.fixed ? v.color : (matrix[v.row][v.col] ? ZD[v.zone] : ZL[v.zone])
+          leafCells.push({ x: v.col - offset, y: v.H, z: v.row - offset, color })
+        }
+
+        // NO-FADE + UNIFORM SOIL: the pot/soil never fades — it stays solid in BOTH the 3D and the top-down (a true,
+        // consistent projection, never transparent). it's a UNIFORM terracotta/soil with NO per-module QR tint, so the
+        // pot reads clean (no speckles). the handful of central modules the pot covers are carried by the leaf canopy
+        // above it plus the code's error correction, so the flat top-down still scans cleanly. (verified 0% decode-fail
+        // across the whole length range.) potCells keep the solid colours set in buildPot.
+
+        return {
+          groups: [
+            { cells: groundCells, fade: false, sway: false },
+            { cells: potCells, fade: false, sway: false },   // NO-FADE — pot/soil stay solid, uniform (no per-module tint)
+            { cells: leafCells, fade: false, sway: true },
+            { cells: overhang, fade: true, sway: true }
+          ],
+          view: { span: gridSize, maxR, maxY, spanK: 0.6, radK: 0.82, heightK: 0.55, focusK: 0.4 }
+        }
+      }
+      return { build }
+    })()
+
+    // ======================================================================
+    // PINE — tiered notched fir. The body is dark green; only the exposed top
+    // needle of each cell is coloured by its module, so the canopy carries the
+    // QR and (in snow) the white lands only on the upward tops = snow resting ON
+    // the tree. forest / snow swap palette + ground.
+    // ======================================================================
+    const PINE = (() => {
+      const GROUND = {
+        forest: { dark: new THREE.Color('#3f3020'), light: new THREE.Color('#c2a878') },
+        snow:   { dark: new THREE.Color('#515c68'), light: new THREE.Color('#eef3f6') }   // dark slate (lum ≈90) — old #7a858c was ~130, on the binariser threshold → finders misread
+      }
+      const TRUNK = { forest: new THREE.Color('#5e4329'), snow: new THREE.Color('#5a4636') }
+      const PAL = {
+        forest: { dark: new THREE.Color('#244f29'), pale: new THREE.Color('#a6c96a') },
+        snow:   { dark: new THREE.Color('#2f5a37'), pale: new THREE.Color('#eef3f4') }
+      }
+      // earthy light/dark bark pair for any trunk cube that peeks from the top → carries the QR (no fade)
+      const TR_MATCH = { forest: { l: new THREE.Color('#b08a5a'), d: new THREE.Color('#3a2a18') }, snow: { l: new THREE.Color('#a9968a'), d: new THREE.Color('#3a2c22') } }
+      const PINE_DEAD = new Set([15, 16, 19, 23]) // QR versions that don't decode under the cone (all at 360+ char URLs)
+      function canopyTiered(d, outer, TIERS, LAYERS_PER_TIER) {
+        const total = TIERS * LAYERS_PER_TIER, out = []
+        for (let L = 0; L < total; L++) {
+          const tier = Math.floor(L / LAYERS_PER_TIER)
+          const p = (L - tier * LAYERS_PER_TIER) / LAYERS_PER_TIER
+          const taper = tier === TIERS - 1 ? 0.12 : 0.46
+          const r = outer * (1 - tier * 0.18) * (1 - p * (1 - taper))
+          if (d <= r) out.push(L)
+        }
+        return out
+      }
+      function build(content, variant) {
+        // FIXED version 9 (53×53): like all v7+ it carries SIX alignment patterns (auto picked v3 for longer URLs, whose
+        // SINGLE central pattern sits under the cone and gets obscured → undecodable). v9 holds ~174 bytes before any
+        // fallback, so every realistic URL renders at ONE clean grid and — crucially — it SKIPS v8 (49×53), the awkward
+        // density where the soft forest greens blur below the binariser threshold. this keeps the soft palette scannable
+        // across the whole realistic range (≈290 chars) with no contrast boost. trade-off: 53² matches the caladium grid.
+        // min v9, level M, skipping the dead-zone versions (v15/16/19/23 don't decode under the cone — v15/16/19 are
+        // contrast-marginal for the soft forest greens at that module size, v23 is structural; snow's boost saves all but v23).
+        const matrix = qrMatrixSafe(content, 'M', 9, PINE_DEAD)
+        const gridSize = matrix.length
+        const cx = (gridSize - 1) / 2, cy = (gridSize - 1) / 2
+        const offset = (gridSize - 1) / 2
+        // proportions SCALE with the grid so the cone stays a proper fir at any QR version. the OLD fixed sizes made
+        // a ~39-tall cone even on a small (short-URL) grid → extreme height softened the fine module edges and the
+        // level-M code stopped decoding for longer URLs. scaling keeps height ≈ 1.5× width → clean modules, robust.
+        const sc = gridSize / 33
+        const TRUNK_LAYERS = Math.max(5, Math.round(9 * sc))   // taller bole so the cone lifts off the ground (not a low bush)
+        const TIERS = 5, LAYERS_PER_TIER = Math.max(4, Math.round(5 * sc))
+        const outer = gridSize * 0.32
+        const canopyBase = TRUNK_LAYERS * CUBE
+        const G = GROUND[variant], TR = TRUNK[variant], P = PAL[variant], TM = TR_MATCH[variant]
+
+        const groundCells = []
+        for (let row = 0; row < gridSize; row++) for (let col = 0; col < gridSize; col++)
+          groundCells.push({ x: col - offset, y: 0, z: row - offset, color: matrix[row][col] ? G.dark : G.light })
+
+        // round, gently tapered bole — a pine trunk is a slim ROUND cylinder, a touch wider at the base than up top.
+        // per-layer circular cross-section (octagonal at this voxel scale) + an upward taper so it reads round, not a
+        // square prism. purely cosmetic for the 3D: the top-down QR is unaffected (trunk cells are hidden under the
+        // canopy or QR-matched on the projection, so every module still renders its true on/off colour).
+        const trunkBaseR = Math.max(1.7, 2.1 * sc)
+        const trunkCells = []
+        for (let L = 0; L < TRUNK_LAYERS; L++) {
+          const rL = trunkBaseR * (1 - 0.30 * (L / Math.max(1, TRUNK_LAYERS - 1))) // taper: widest at the base
+          const r2 = rL * rL
+          for (let row = 0; row < gridSize; row++) for (let col = 0; col < gridSize; col++) {
+            const dc = col - cx, dr = row - cy
+            if (dc * dc + dr * dr >= r2) continue
+            trunkCells.push({ x: col - offset, y: L * CUBE, z: row - offset, color: TR, col, row })
+          }
+        }
+
+        const canopy = []
+        for (let row = 0; row < gridSize; row++) for (let col = 0; col < gridSize; col++) {
+          const d = Math.hypot(col - cx, row - cy)
+          if (d >= outer) continue
+          const layers = canopyTiered(d, outer, TIERS, LAYERS_PER_TIER)
+          if (!layers.length) continue
+          for (const L of layers) canopy.push({ col, row, baseY: canopyBase + L * CUBE })
+        }
+        const cellTop = new Map()
+        for (const v of canopy) { const k = v.col * 4096 + v.row; const m = cellTop.get(k); if (m === undefined || v.baseY > m) cellTop.set(k, v.baseY) }
+        const canopyCells = []
+        for (const v of canopy) {
+          const top = v.baseY >= cellTop.get(v.col * 4096 + v.row) - 0.001
+          const dark = matrix[v.row][v.col]
+          canopyCells.push({ x: v.col - offset, y: v.baseY, z: v.row - offset, color: top ? (dark ? P.dark : P.pale) : P.dark })
+        }
+
+        // NO-FADE: the trunk never fades. cubes hidden under the canopy stay solid bark; any that peek from straight
+        // above are QR-matched (earthy light/dark) so the flat top-down is a true, scannable projection.
+        const canopyTopAt = new Map()
+        for (const v of canopy) { const k = v.col * 4096 + v.row; const m = canopyTopAt.get(k); if (m === undefined || v.baseY > m) canopyTopAt.set(k, v.baseY) }
+        for (const v of trunkCells) {
+          const k = v.col * 4096 + v.row
+          if ((v.y + 0.001) > (canopyTopAt.get(k) ?? -Infinity)) v.color = matrix[v.row][v.col] ? TM.d : TM.l   // peeks → carry the QR
+        }
+
+        const totalHeight = TRUNK_LAYERS + TIERS * LAYERS_PER_TIER
+        return {
+          groups: [
+            { cells: groundCells, fade: false, sway: false },
+            { cells: trunkCells, fade: false, sway: false },   // NO-FADE — solid bark where hidden, QR-matched where it peeks
+            { cells: canopyCells, fade: false, sway: true }
+          ],
+          view: { span: gridSize, maxR: 0, maxY: totalHeight, spanK: 0.64, radK: 0, heightK: 0.52, focusK: 0.42 }
+        }
+      }
+      return { build }
+    })()
+
+    const FRANGI = (() => {
+      const C = h => new THREE.Color(h)
+      const FRANGI_DEAD = new Set([19, 23, 29]) // QR versions that don't decode under the canopy (all at 320+ char URLs)
+      const LEN = 3.7
+      const CREAM_C = C('#f0e4cd'), FLOOR_DARK_C = C('#463726')
+      const PETIOLE_DARK = C('#7a4030'), PETIOLE_PALE = C('#cf9478')
+      const ZD = { midrib: C('#43301e'), blade: C('#22512a'), vein: C('#1c4824'), margin: C('#1b4220') }
+      const ZL = { midrib: C('#d8c4a0'), blade: C('#bcd29f'), vein: C('#dbe7bd'), margin: C('#aac08f') }
+      const ZN = { midrib: C('#5a3a22'), blade: C('#345c2c'), vein: C('#dbe7bd'), margin: C('#1b4220') }
+      const PALETTES = [
+        { name: 'white', eye: [C('#dd9a26'), C('#f0c038')], grad: [C('#f4d062'), C('#f6df93'), C('#f6ebc2'), C('#f7f2e2'), C('#fefdfa')] },
+        { name: 'ivory', eye: [C('#d9982a'), C('#eec141')], grad: [C('#f0d36e'), C('#f2e09a'), C('#f1ead0'), C('#f6f1de'), C('#fdfbf2')] },
+        { name: 'lemon', eye: [C('#cf9020'), C('#ecb52c')], grad: [C('#f0d860'), C('#eee596'), C('#ecefbe'), C('#f3f4d6'), C('#fdfceb')] }
+      ]
+      const FL_PETAL_D = C('#6e4d24'), FL_EYE_D = C('#805611')
+      const POT_R = 7.5, POT_H = 11   // a touch smaller than the caladium pot (8.5) — frangipani pot was reading too big
+      const POT_BODY = C('#b5602f'), POT_RIM = C('#c87544'), POT_SOIL = C('#46331f')
+      const BARK_L = [C('#ccb892'), C('#c89a72'), C('#c3b083')]
+      const BARK_D = [C('#3a2a16'), C('#4e2d1a'), C('#2c2110')]
+      const BARK_C = [C('#7d6c4f'), C('#8a5a3c'), C('#5e5138')]
+      function frac(x) { return x - Math.floor(x) }
+      function makeRng(seed) { let s = (seed >>> 0) || 1; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296 } }
+      function hashMatrix(m) { let h = 2166136261 >>> 0; for (let r = 0; r < m.length; r++) for (let c = 0; c < m.length; c++) { h ^= m[r][c] ? 1 : 0; h = (h * 16777619) >>> 0 } return h }
+      function leafShape(u, v) { if (v < 0 || v > 1) return false; const w = 0.72 * Math.pow(Math.sin(Math.PI * Math.pow(Math.min(1, v * 1.05), 0.6)), 0.36); return Math.abs(u) <= w }
+      function leafZone(u, v, e1, e2) { if (e1 || e2) return 'margin'; const t = Math.abs(u); if (t < 0.11) return 'midrib'; if (frac(v * 7.5 - t * 2.4) < 0.16) return 'vein'; return 'blade' }
+      function pushCell(onOut, offOut, col, row, H, offset, zone, gridSize) {
+        const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
+        if (onTile) onOut.push({ col, row, H, zone }); else offOut.push({ x: col - offset, y: H, z: row - offset, color: ZN[zone] })
+      }
+      function pushStalk(onOut, offOut, wx, wy, wz, matrix, offset, gridSize) {
+        const col = Math.round(wx + offset), row = Math.round(wz + offset)
+        const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
+        if (onTile) onOut.push({ col, row, H: wy, color: matrix[row][col] ? PETIOLE_DARK : PETIOLE_PALE, fixed: true })
+        else offOut.push({ x: col - offset, y: wy, z: row - offset, color: PETIOLE_PALE })
+      }
+      function buildLeaf(onOut, offOut, leaf, matrix, offset, gridSize, baseY0, ox = 0, oz = 0) {
+        const { cx, cz, az, size, baseH, rise, droop, cup } = leaf
+        const ca = Math.cos(az), sa = Math.sin(az), du = 1 / size, dv = 1 / (size * LEN)
+        const ext = Math.ceil(size * (LEN + 0.6)), ccol = Math.round(cx + offset), crow = Math.round(cz + offset)
+        let lmaxY = baseH
+        const sSteps = Math.ceil(Math.hypot(cx - ox, cz - oz) + Math.abs(baseH - baseY0)) + 1
+        for (let s = 0; s <= sSteps; s++) { const f = s / sSteps; pushStalk(onOut, offOut, ox + (cx - ox) * f, baseY0 + (baseH - baseY0) * f, oz + (cz - oz) * f, matrix, offset, gridSize) }
+        for (let col = ccol - ext; col <= ccol + ext; col++) for (let row = crow - ext; row <= crow + ext; row++) {
+          const dx = (col - offset) - cx, dz = (row - offset) - cz
+          const lz = dx * ca + dz * sa, lx = -dx * sa + dz * ca
+          const u = lx / size, v = lz / (size * LEN)
+          if (v < 0 || v > 1 || u < -1 || u > 1) continue
+          if (!leafShape(u, v)) continue
+          const e1 = !leafShape(u + du, v) || !leafShape(u - du, v) || !leafShape(u, v + dv) || !leafShape(u, v - dv)
+          const e2 = !leafShape(u + 2 * du, v) || !leafShape(u - 2 * du, v) || !leafShape(u, v + 2 * dv) || !leafShape(u, v - 2 * dv)
+          const zone = leafZone(u, v, e1, e2)
+          const H = baseH + v * rise - droop * v * v - cup * u * u
+          pushCell(onOut, offOut, col, row, Math.max(2, H), offset, zone, gridSize)
+          if (H > lmaxY) lmaxY = H
+        }
+        return lmaxY
+      }
+      function buildFlower(matrix, offset, gridSize, fcx, fcz, baseY, R, sc, twist, tilt, faceAz, pal) {
+        const P = 5, sector = (Math.PI * 2) / P
+        const st = Math.sin(tilt), ct = Math.cos(tilt), ca = Math.cos(faceAz), sa = Math.sin(faceAz)
+        const nx = st * ca, ny = ct, nz = st * sa, ex = -sa, ez = ca, ux = -ca * ct, uy = st, uz = -sa * ct
+        const seen = new Map(), vox = []
+        let top = baseY
+        const dr = 0.42 / R, dth = 0.5 / R
+        for (let r = 0; r <= 1.0001; r += dr) for (let th = 0; th < Math.PI * 2; th += dth) {
+          let lightColor, h
+          if (r < 0.16) { h = (0.40 - (r / 0.16) * 0.12) * R; lightColor = r < 0.07 ? pal.eye[0] : pal.eye[1] }
+          else {
+            const a = th + twist + 0.75 * r
+            const pc = (((a % sector) + sector) % sector) / sector
+            const petalW = Math.pow(Math.sin(Math.PI * pc), 0.6)
+            const reach = 0.46 + 0.54 * petalW
+            if (r > reach) continue
+            const ridge = Math.pow(pc, 1.2) * 0.40 * R, lift = (r - 0.16) * 0.07 * R
+            h = ridge + lift
+            const tnorm = (r - 0.16) / 0.84, swirlBias = (1 - pc) * 0.55
+            const gi = Math.max(0, Math.min(pal.grad.length - 1, Math.floor((tnorm - swirlBias) * pal.grad.length)))
+            lightColor = pal.grad[gi]
+          }
+          const px = r * R * Math.cos(th), py = r * R * Math.sin(th)
+          const wx = Math.round(fcx + px * ex + py * ux + h * nx)
+          const wy = Math.round(baseY + py * uy + h * ny)
+          const wz = Math.round(fcz + px * ez + py * uz + h * nz)
+          const key = wx + ',' + wy + ',' + wz
+          if (!seen.has(key)) { seen.set(key, 1); vox.push({ x: wx, y: wy, z: wz, color: lightColor }) }
+          if (wy > top) top = wy
+        }
+        return { vox, top }
+      }
+      function flowerDarkCells(vox, matrix, offset, gridSize) {
+        const cells = new Set(); let dark = 0
+        for (const v of vox) {
+          const col = Math.round(v.x + offset), row = Math.round(v.z + offset)
+          if (col < 0 || row < 0 || col >= gridSize || row >= gridSize) continue
+          const k = col + ',' + row; if (cells.has(k)) continue; cells.add(k); if (matrix[row][col]) dark++
+        }
+        return dark
+      }
+      function drawPeduncle(onOut, x0, y0, z0, x1, y1, z1, matrix, offset, gridSize) {
+        const steps = Math.ceil(Math.hypot(x1 - x0, z1 - z0) + Math.abs(y1 - y0)) + 1
+        for (let s = 0; s <= steps; s++) { const f = s / steps; pushStalk(onOut, [], x0 + (x1 - x0) * f, y0 + (y1 - y0) * f, z0 + (z1 - z0) * f, matrix, offset, gridSize) }
+      }
+      function buildPot(out, potR, potH) {
+        for (let ly = 0; ly < potH; ly++) {
+          const rOut = potR * (0.72 + 0.28 * ly / (potH - 1)), rIn = rOut - 1.6, rim = ly === potH - 1, m = Math.ceil(potR)
+          for (let x = -m; x <= m; x++) for (let z = -m; z <= m; z++) { const d = Math.hypot(x, z); if (d <= rOut && d >= rIn) out.push({ x, y: ly, z, kind: rim ? 'rim' : 'pot' }) }
+        }
+        const mf = Math.ceil(potR), soilTop = potH - 2
+        for (let ly = soilTop; ly >= Math.max(0, soilTop - 2); ly--) {
+          const rFill = potR * (0.72 + 0.28 * ly / (potH - 1)) - 1.1
+          for (let x = -mf; x <= mf; x++) for (let z = -mf; z <= mf; z++) if (Math.hypot(x, z) <= rFill) out.push({ x, y: ly, z, kind: 'soil' })
+        }
+      }
+      function buildTrunk(out, trunkR, potH, trunkTop) {
+        const m = Math.ceil(trunkR)
+        for (let ly = potH - 1; ly <= trunkTop; ly++) {
+          const r = trunkR * (1 - 0.16 * (ly - potH) / Math.max(1, trunkTop - potH))
+          for (let x = -m; x <= m; x++) for (let z = -m; z <= m; z++) if (Math.hypot(x, z) <= r) out.push({ x, y: ly, z, kind: 'bark' })
+        }
+      }
+      function buildBranch(out, x0, y0, z0, x1, y1, z1, r0) {
+        const steps = Math.ceil(Math.hypot(x1 - x0, z1 - z0) + Math.abs(y1 - y0)) + 1
+        for (let s = 0; s <= steps; s++) {
+          const f = s / steps, bx = x0 + (x1 - x0) * f, by = y0 + (y1 - y0) * f, bz = z0 + (z1 - z0) * f
+          const r = Math.max(1.0, r0 * (1 - 0.5 * f)), m = Math.ceil(r), cx = Math.round(bx), cz = Math.round(bz), cy = Math.round(by)
+          for (let dx = -m; dx <= m; dx++) for (let dz = -m; dz <= m; dz++) if (Math.hypot(dx, dz) <= r) out.push({ x: cx + dx, y: cy, z: cz + dz, kind: 'bark' })
+        }
+      }
+      function bloomSpotsNear(matrix, gridSize, rng, ccol, crow, Rc, K, sep) {
+        const samp = Math.max(2, Math.round(gridSize * 0.05)), cand = []
+        for (let dc = -Rc; dc <= Rc; dc++) for (let dr = -Rc; dr <= Rc; dr++) {
+          if (Math.hypot(dc, dr) > Rc) continue
+          const col = ccol + dc, row = crow + dr
+          if (col < 0 || row < 0 || col >= gridSize || row >= gridSize) continue
+          let lit = 0, n = 0
+          for (let a = -samp; a <= samp; a++) for (let b = -samp; b <= samp; b++) {
+            if (Math.hypot(a, b) > samp) continue
+            const c2 = col + a, r2 = row + b
+            if (c2 < 0 || r2 < 0 || c2 >= gridSize || r2 >= gridSize) continue
+            if (!matrix[r2][c2]) lit++; n++
+          }
+          cand.push({ col, row, d: n ? lit / n : 0, j: rng() * 0.03 })
+        }
+        cand.sort((p, q) => (q.d + q.j) - (p.d + p.j))
+        const picks = []
+        for (const c of cand) { if (picks.length >= K) break; if (picks.every(p => Math.hypot(p.col - c.col, p.row - c.row) > sep)) picks.push(c) }
+        return picks
+      }
+      function generate(matrix) {
+        const gridSize = matrix.length, offset = (gridSize - 1) / 2, sc = gridSize / 33
+        const rng = makeRng(hashMatrix(matrix))
+        const ground = []
+        for (let row = 0; row < gridSize; row++) for (let col = 0; col < gridSize; col++) ground.push({ x: col - offset, y: 0, z: row - offset, color: matrix[row][col] ? FLOOR_DARK_C : CREAM_C })
+        const potR = POT_R * sc, potH = Math.max(4, Math.round(POT_H * sc))
+        const trunkR = Math.max(1.3, 2.0 * sc), forkY = potH + Math.round(gridSize * 0.2)
+        const pot = []; buildPot(pot, potR, potH)
+        const trunk = []; buildTrunk(trunk, trunkR, potH, forkY)
+        const NB = 2, a0b = rng() * Math.PI * 2, tipD = gridSize * 0.16, tips = []
+        for (let b = 0; b < NB; b++) {
+          const ang = a0b + (b / NB) * Math.PI * 2 + (rng() - 0.5) * 0.22, len = 0.85 + rng() * 0.25
+          const tx = Math.cos(ang) * tipD * len, tz = Math.sin(ang) * tipD * len
+          const ty = forkY + Math.round(gridSize * (0.05 + b * 0.14 + rng() * 0.05))
+          tips.push({ x: tx, z: tz, y: ty })
+          buildBranch(trunk, 0, forkY, 0, tx, ty, tz, trunkR * 0.62)
+        }
+        const leaves = [], overhang = [], flower = [], MAX_TILT = 1.4, S = gridSize * 0.5 - 0.3
+        const pal = PALETTES[hashMatrix(matrix) % PALETTES.length]
+        let maxY = 0, maxR = 0, flBudget = 5 + (rng() < 0.6 ? 1 : 0)
+        for (let ti = 0; ti < tips.length; ti++) {
+          const tip = tips[ti]
+          const Nl = 7 + Math.floor(rng() * 2), a0 = rng() * Math.PI * 2, outAz = Math.atan2(tip.z, tip.x)
+          let tipLeafTop = tip.y
+          for (let k = 0; k < Nl; k++) {
+            const az = a0 + (k / Nl) * Math.PI * 2 + (rng() - 0.5) * 0.18
+            const dirScale = 0.4 + 0.6 * (Math.cos(az - outAz) * 0.5 + 0.5)
+            const rc = (2.2 + rng() * 1.4) * sc * (0.7 + 0.3 * dirScale)
+            const size = (14 + rng() * 5) * sc * dirScale
+            const cA = Math.abs(Math.cos(az)), sA = Math.abs(Math.sin(az))
+            const reach0 = rc + size * LEN, lat = size * 0.72
+            const fLimX = (0.88 * S - Math.abs(tip.x)) / (reach0 * cA + lat * sA)
+            const fLimZ = (0.88 * S - Math.abs(tip.z)) / (reach0 * sA + lat * cA)
+            const f = Math.min(1.0, fLimX, fLimZ)
+            if (f < 0.12) continue
+            const rcf = rc * f, sizef = size * f
+            const baseH = tip.y + Math.max((rng() * 3 - 1) * sc, rcf / MAX_TILT)
+            const leaf = { cx: tip.x + Math.cos(az) * rcf, cz: tip.z + Math.sin(az) * rcf, az, size: sizef, baseH, rise: (2.2 + rng() * 1.2) * sc, droop: (1.5 + rng() * 2) * sc, cup: (1.5 + rng() * 1.5) * sc }
+            const ly = buildLeaf(leaves, overhang, leaf, matrix, offset, gridSize, tip.y, tip.x, tip.z)
+            if (ly > maxY) maxY = ly
+            if (ly > tipLeafTop) tipLeafTop = ly
+            const rr = Math.hypot(tip.x, tip.z) + rcf + sizef * LEN; if (rr > maxR) maxR = rr
+          }
+          const tcol = Math.round(tip.x + offset), trow = Math.round(tip.z + offset)
+          const nodeY = tip.y + Math.round(0.5 * sc)
+          drawPeduncle(leaves, tip.x, tip.y, tip.z, tip.x, nodeY, tip.z, matrix, offset, gridSize)
+          const tipsLeft = tips.length - ti, nFl = Math.min(flBudget, Math.round(flBudget / tipsLeft + 0.2))
+          flBudget -= nFl
+          const pool = bloomSpotsNear(matrix, gridSize, rng, tcol, trow, Math.round(gridSize * 0.095), nFl * 5, gridSize * 0.05)
+          const PER = 50
+          const leafTopAt = new Map()
+          for (const lv of leaves) { const k = lv.col + ',' + lv.row; const c = leafTopAt.get(k); if (c === undefined || lv.H > c) leafTopAt.set(k, lv.H) }
+          const leafClearance = (fcx, fcz, rad) => { let m = -Infinity; const c0 = Math.round(fcx + offset), r0 = Math.round(fcz + offset), R = Math.ceil(rad); for (let dc = -R; dc <= R; dc++) for (let dr = -R; dr <= R; dr++) { const v = leafTopAt.get((c0 + dc) + ',' + (r0 + dr)); if (v !== undefined && v > m) m = v } return m }
+          const usedXY = []
+          for (let i = 0; i < nFl; i++) {
+            const fbY0 = nodeY + Math.round(0.5 * sc)
+            const tilt = rng() * 0.12, faceAz = rng() * Math.PI * 2, twist = rng() * Math.PI * 2
+            let R0 = gridSize * (0.11 + rng() * 0.075), pick = null
+            for (const sp of pool) {
+              if (sp.taken || usedXY.some(u => Math.hypot(u.c - sp.col, u.r - sp.row) < gridSize * 0.06)) continue
+              const b = buildFlower(matrix, offset, gridSize, sp.col - offset, sp.row - offset, fbY0, R0, sc, twist, tilt, faceAz, pal)
+              const dk = flowerDarkCells(b.vox, matrix, offset, gridSize)
+              if (!pick || dk < pick.dk) pick = { sp, built: b, dk }
+              if (dk <= PER) break
+            }
+            if (!pick) break
+            pick.sp.taken = true; usedXY.push({ c: pick.sp.col, r: pick.sp.row })
+            const fcx = pick.sp.col - offset, fcz = pick.sp.row - offset
+            let R = R0, dk = pick.dk
+            for (let t = 0; t < 6 && dk > PER; t++) { R *= 0.86; dk = flowerDarkCells(buildFlower(matrix, offset, gridSize, fcx, fcz, fbY0, R, sc, twist, tilt, faceAz, pal).vox, matrix, offset, gridSize) }
+            const clr = leafClearance(fcx, fcz, R * 0.6)
+            const fbY = Math.max(nodeY, (clr > -Infinity ? clr : nodeY) + Math.round(0.2 * sc))
+            const built = buildFlower(matrix, offset, gridSize, fcx, fcz, fbY, R, sc, twist, tilt, faceAz, pal)
+            drawPeduncle(leaves, tip.x, nodeY, tip.z, fcx, fbY, fcz, matrix, offset, gridSize)
+            for (const v of built.vox) flower.push(v)
+            if (built.top > maxY) maxY = built.top
+          }
+        }
+        if (potR > maxR) maxR = potR
+        for (const v of leaves) { v.x = v.col - offset; v.z = v.row - offset; v.y = v.H; v.color = v.fixed ? v.color : (matrix[v.row][v.col] ? ZD[v.zone] : ZL[v.zone]) }
+        const potColor = { rim: POT_RIM, pot: POT_BODY, soil: POT_SOIL }
+        for (const v of pot) v.color = potColor[v.kind] || POT_BODY
+        const canopyY = new Map()
+        for (const v of leaves) { const k = v.col + ',' + v.row; const c = canopyY.get(k); if (c === undefined || v.H > c) canopyY.set(k, v.H) }
+        for (const v of flower) { const k = Math.round(v.x + offset) + ',' + Math.round(v.z + offset); const c = canopyY.get(k); if (c === undefined || v.y > c) canopyY.set(k, v.y) }
+        for (const v of trunk) {
+          const col = Math.round(v.x + offset), row = Math.round(v.z + offset), k = col + ',' + row
+          const n = Math.abs(Math.sin((v.x * 12.9898 + v.y * 4.1414 + v.z * 78.233)) * 43758.5) % 1
+          const vein = n < 0.2 ? 1 : n < 0.35 ? 2 : 0
+          if (v.y > (canopyY.get(k) ?? -Infinity)) { const dk = (col >= 0 && row >= 0 && col < gridSize && row < gridSize) ? matrix[row][col] : false; v.color = (dk ? BARK_D : BARK_L)[vein] }
+          else v.color = BARK_C[vein]
+        }
+        return { ground, pot, trunk, leaves, overhang, flower, gridSize, maxY, maxR }
+      }
+      function build(content, ver) {
+        // min v17, level H (its dense grid needs the error-correction margin), skipping dead-zone versions v19/23/29
+        // (don't decode under the canopy — all at 320+ char URLs). short/realistic URLs stay v17, untouched.
+        const matrix = qrMatrixSafe(content, 'H', ver || 17, FRANGI_DEAD)
+        const d = generate(matrix)
+        // NO-FADE: only the off-tile overhang fades on flatten; pot/trunk/leaves/flower stay solid → true projection
+        return {
+          groups: [
+            { cells: d.ground, fade: false, sway: false },
+            { cells: d.pot.concat(d.trunk), fade: false, sway: false },
+            { cells: d.leaves, fade: false, sway: true },
+            { cells: d.overhang.map(v => ({ x: v.x, y: v.y, z: v.z, color: v.color })), fade: true, sway: true },
+            { cells: d.flower, fade: false, sway: true }
+          ],
+          view: { span: d.gridSize, maxR: d.maxR, maxY: d.maxY, spanK: 0.58, radK: 0.78, heightK: 0.6, focusK: 0.42 }
+        }
+      }
+      return { build }
+    })()
+
+    // ======================================================================
+    // PITCHER — Nepenthes rafflesiana (v1). Potted plant: terracotta pot + uniform
+    // soil, a rosette of green strappy leaves carrying the QR canopy, and 1-2
+    // LEVITATING pitchers of DIFFERENT sizes hung from tendrils off the leaf tips
+    // (they float, never touch soil, never intersect a leaf — de-intersection
+    // carves any overlap). Tall red funnel, red-striped peristome + neck + lid +
+    // wings, cream body RED-mottled. Every cell coloured by its module (tops = real
+    // QR, occluded = the same mottle in an occluded palette = cohesive, no seam).
+    // ======================================================================
+    const PITCHER = (() => {
+      const C = h => new THREE.Color(h)
+      const CREAM_C = C('#f1ece2'), FLOOR_DARK_C = C('#566159')
+      const POT_BODY = C('#c0744d'), POT_RIM = C('#d98f63'), POT_SOIL = C('#4f3b2a')
+      // GREENER variant: hue shifted toward a richer glossy green (less cream/sage), luminance held so decode margin survives
+      const LD = { mid: C('#234c26'), blade: C('#2e6831'), vein: C('#295c2b'), margin: C('#224a25') }
+      const LL = { mid: C('#aece90'), blade: C('#b9dba0'), vein: C('#cfe6b6'), margin: C('#a8ca87') }
+      const LOD = { mid: C('#29512a'), blade: C('#356235'), vein: C('#305b30'), margin: C('#294f29') }
+      const LOL = { mid: C('#9fc285'), blade: C('#aece90'), vein: C('#c2dcab'), margin: C('#98bb7e') }
+      const LN  = { mid: C('#356a37'), blade: C('#467d40'), vein: C('#cfe6b6'), margin: C('#224a25') }
+      const STK_D = C('#3f5a2c'), STK_L = C('#86a064')
+      const PB_L = C('#e7ddbe'), PB_D = C('#6e2a30'), PB_OL = C('#d6c2a0'), PB_OD = C('#7c3038')
+      const PERI_L = C('#edd2bc'), PERI_D = C('#7e2330')
+      const LID_L = C('#d8c4a0'), LID_D = C('#5a2330')   // cream + dark red → reads as PITCHER, not a green leaf
+      const WING_L = C('#dacca6'), WING_D = C('#6d3a2c'), WING_OL = C('#c9b893'), WING_OD = C('#6f4233')
+      const THROAT_C = C('#39141a')   // dark recessed mouth interior — reads as an open trap, not a capped top
+      const PIT_DEAD = new Set([15, 19, 23])
+
+      const frac = x => x - Math.floor(x)
+      function lance(u, v) { if (v < 0 || v > 1) return false; const w = Math.pow(Math.sin(Math.PI * v), 0.6) * (1 - 0.30 * v) * 0.78; return Math.abs(u) <= w }
+      function leafZone(u, v, edge) { if (edge) return 'margin'; const t = Math.abs(u); if (t < 0.12) return 'mid'; if (frac(v * 6 - t * 2) < 0.10) return 'vein'; return 'blade' }
+      function pushCell(onOut, offOut, col, row, H, offset, zone, gridSize) {
+        const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
+        if (onTile) onOut.push({ col, row, H, zone })
+        else offOut.push({ x: col - offset, y: H, z: row - offset, color: LN[zone] })
+      }
+      function pushStalk(onOut, offOut, wx, wy, wz, matrix, offset, gridSize) {
+        const col = Math.round(wx + offset), row = Math.round(wz + offset)
+        const onTile = col >= 0 && row >= 0 && col < gridSize && row < gridSize
+        if (onTile) onOut.push({ col, row, H: wy, color: matrix[row][col] ? STK_D : STK_L, fixed: true })
+        else offOut.push({ x: col - offset, y: wy, z: row - offset, color: STK_L })
+      }
+      function buildLeaf(onOut, offOut, leaf, matrix, offset, gridSize) {
+        const { cx, cz, az, size, baseH, rise, droop } = leaf
+        const ca = Math.cos(az), sa = Math.sin(az)
+        const du = 1 / size, dv = 1 / (size * 2.2)
+        const ext = Math.ceil(size * 2.4)
+        const ccol = Math.round(cx + offset), crow = Math.round(cz + offset)
+        const sSteps = Math.ceil(Math.hypot(cx, cz) + baseH) + 1
+        for (let s = 0; s <= sSteps; s++) { const f = s / sSteps; pushStalk(onOut, offOut, cx * f, baseH * f, cz * f, matrix, offset, gridSize) }
+        for (let col = ccol - ext; col <= ccol + ext; col++) for (let row = crow - ext; row <= crow + ext; row++) {
+          const dx = (col - offset) - cx, dz = (row - offset) - cz
+          const lz = dx * ca + dz * sa, lx = -dx * sa + dz * ca
+          const u = lx / size, v = lz / (size * 2.2)
+          if (!lance(u, v)) continue
+          const edge = !lance(u + du, v) || !lance(u - du, v) || !lance(u, v + dv) || !lance(u, v - dv)
+          const zone = leafZone(u, v, edge)
+          const H = baseH + v * rise - droop * v * v
+          pushCell(onOut, offOut, col, row, Math.max(0.5, H), offset, zone, gridSize)
+        }
+        // leaf tip (far end) — where a pitcher tendril attaches
+        return { tx: cx + ca * size * 1.7, tz: cz + sa * size * 1.7, tipH: baseH + rise - droop }
+      }
+      function buildPot(out, potR, potH) {
+        for (let ly = 0; ly < potH; ly++) {
+          const rOut = potR * (0.7 + 0.3 * ly / (potH - 1)), rIn = rOut - 1.6, rim = ly === potH - 1, m = Math.ceil(potR)
+          for (let x = -m; x <= m; x++) for (let z = -m; z <= m; z++) { const d = Math.hypot(x, z); if (d <= rOut && d >= rIn) out.push({ x, y: ly, z, color: rim ? POT_RIM : POT_BODY }) }
+        }
+        const mf = Math.ceil(potR), soilTop = potH - 2
+        for (let ly = soilTop; ly >= Math.max(0, soilTop - 2); ly--) { const rFill = potR * (0.7 + 0.3 * ly / (potH - 1)) - 1.1; for (let x = -mf; x <= mf; x++) for (let z = -mf; z <= mf; z++) if (Math.hypot(x, z) <= rFill) out.push({ x, y: ly, z, color: POT_SOIL }) }
+      }
+      // Nepenthes rafflesiana LOWER pitcher: bulbous belly widest in the lower third (f≈0.32),
+      // tapering to a constricted-but-open mouth. base rounds in, mouth stays ~0.6·pr.
+      // taller, slimmer rafflesiana profile (~2:1 tall:wide) — gently bulbous low, tapering to the capped mouth
+      function bodyR(pr, f) { return pr * (0.34 + 0.42 * Math.sin(Math.PI * Math.pow(f, 0.58)) + 0.20 * f) }
+      function leafClear(leafMap, col, row, y) { const a = leafMap.get(col + ',' + row); if (!a) return true; for (const lh of a) if (Math.abs(lh - y) < 2.6) return false; return true }
+      // levitating mouth-up pitcher hung at baseY: bulbous cup → rolled peristome rim (tilted, low front /
+      // raised rear neck) → an oval LID roofing the mouth from the back → two fringed front wings.
+      // de-intersection carves any cell that would pass through a leaf.
+      function buildPitcher(matchedOut, solidOut, leafMap, px, pz, baseY, ph, pr, faceAz, matrix, offset, gridSize) {
+        const cells = [], ca = Math.cos(faceAz), sa = Math.sin(faceAz)
+        // pitcher is SOLID — it does NOT yield to leaves. instead the LEAVES are carved around it afterwards (see the
+        // leaf-carve post-pass), so the trap always reads as a solid object and no leaf ever slices through it.
+        const put = (col, row, y, kind) => { cells.push({ col, row, y, kind }) }
+        // per-angle mouth height: front of the rim sits LOW, rear rises into the neck → mouth faces up-and-forward
+        const rimAt = (dx, dz, rr) => { const front = rr > 0.6 ? (dx * ca + dz * sa) / rr : 0; return ph - 1 - Math.round((front + 1) * 1.5) }
+        for (let ly = 0; ly < ph; ly++) {
+          const f = ly / Math.max(1, ph - 1), rr = bodyR(pr, f), m = Math.ceil(rr) + 1
+          // round the base in: a hemispherical floor on the lowest layers so the belly doesn't read as a flat disc
+          const shell = ly < 2 ? rr : 1.8
+          for (let dx = -m; dx <= m; dx++) for (let dz = -m; dz <= m; dz++) {
+            const d = Math.hypot(dx, dz); if (d > rr || d < rr - shell) continue
+            const rimTop = rimAt(dx, dz, rr)
+            if (ly > rimTop) continue
+            put(Math.round(px + offset + dx), Math.round(pz + offset + dz), baseY + ly, ly >= rimTop - 1 ? 'peri' : 'body')
+          }
+        }
+        const mouthR = bodyR(pr, 1)
+        const segs = Math.max(16, Math.round(mouthR * 6))
+        // THROAT — a recessed dark WELL several layers deep inside the rim → a clearly visible open mouth (not a capped top).
+        // only the top layer (rimTop-1) is visible from straight above, so deepening the well downward is decode-free.
+        { const mm = Math.ceil(mouthR)
+          for (let dx = -mm; dx <= mm; dx++) for (let dz = -mm; dz <= mm; dz++) {
+            if (Math.hypot(dx, dz) > mouthR - 0.5) continue
+            const rimTop = rimAt(dx, dz, mouthR)
+            for (let kk = 1; kk <= 4; kk++) put(Math.round(px + offset + dx), Math.round(pz + offset + dz), baseY + rimTop - kk, 'throat')
+          } }
+        // rolled peristome lip — a flared glossy ring just outside the cup at the mouth line
+        for (let i = 0; i < segs; i++) {
+          const a = (i / segs) * Math.PI * 2, dx = Math.cos(a) * (mouthR + 0.5), dz = Math.sin(a) * (mouthR + 0.5)
+          const rimTop = rimAt(dx, dz, mouthR)
+          put(Math.round(px + offset + dx), Math.round(pz + offset + dz), baseY + rimTop, 'peri')
+          put(Math.round(px + offset + dx), Math.round(pz + offset + dz), baseY + rimTop + 1, 'peri')
+        }
+        // taller rear NECK so the lid hinges well ABOVE the rim (clear air beneath it)
+        const neckH = 2 + Math.round(pr * 0.5)
+        for (let i = 0; i <= neckH; i++) for (let j = -1; j <= 1; j++)
+          put(Math.round(px + offset - ca * (mouthR - 0.2) - sa * j), Math.round(pz + offset - sa * (mouthR - 0.2) + ca * j), baseY + ph - 1 + i, 'peri')
+        // LID (operculum) — a distinct angled roof held HIGH above the open mouth (jaunty open-lid pose, gap beneath)
+        const hdx = -ca * (mouthR - 0.4), hdz = -sa * (mouthR - 0.4), hy = baseY + ph - 1 + neckH + 1
+        const lidLen = mouthR * 2.0, lidW = mouthR * 1.15
+        for (let a = 0; a <= lidLen; a += 0.5) for (let b = -lidW; b <= lidW; b += 0.5) {
+          const fa = a / lidLen, fb = b / Math.max(0.5, lidW)
+          if (fa * fa * 0.5 + fb * fb > 1) continue                  // teardrop oval, broad at the hinge
+          const dx = hdx + ca * a - sa * b, dz = hdz + sa * a + ca * b
+          const y = hy + 0.4 * a                                     // steep back-tilt → a clearly raised roof, mouth open below
+          put(Math.round(px + offset + dx), Math.round(pz + offset + dz), Math.round(y), 'lid')
+        }
+        // two fringed front WINGS running down the belly (flanking the front, distinct frills)
+        for (let ly = 1; ly < ph - 1; ly++) {
+          const rad = bodyR(pr, ly / (ph - 1)) + 0.3, comb = ly % 2 === 0
+          for (const side of [-1, 1]) {
+            put(Math.round(px + offset + ca * rad - sa * side * 1.5), Math.round(pz + offset + sa * rad + ca * side * 1.5), baseY + ly, 'wing')
+            if (comb) put(Math.round(px + offset + ca * (rad + 0.8) - sa * side * 1.5), Math.round(pz + offset + sa * (rad + 0.8) + ca * side * 1.5), baseY + ly, 'wing')
+          }
+        }
+        const top = new Map()
+        for (const c of cells) { const k = c.col + ',' + c.row; const cur = top.get(k); if (!cur || c.y > cur.y) top.set(k, c) }
+        for (const c of cells) {
+          const onTile = c.col >= 0 && c.row >= 0 && c.col < gridSize && c.row < gridSize
+          const dark = onTile ? matrix[c.row][c.col] : false
+          if (top.get(c.col + ',' + c.row) === c && onTile) {
+            const pr2 = c.kind === 'throat' ? [THROAT_C, THROAT_C] : c.kind === 'peri' ? [PERI_L, PERI_D] : c.kind === 'lid' ? [LID_L, LID_D] : c.kind === 'wing' ? [WING_L, WING_D] : [PB_L, PB_D]
+            matchedOut.push({ x: c.col - offset, y: c.y, z: c.row - offset, color: dark ? pr2[1] : pr2[0] })
+          } else {
+            const op = c.kind === 'throat' ? [THROAT_C, THROAT_C] : c.kind === 'peri' ? [PERI_L, PERI_D] : c.kind === 'lid' ? [LID_L, LID_D] : c.kind === 'wing' ? [WING_OL, WING_OD] : [PB_OL, PB_OD]
+            solidOut.push({ x: c.col - offset, y: c.y, z: c.row - offset, color: onTile ? (dark ? op[1] : op[0]) : PB_OD })
+          }
+        }
+      }
+      // green tendril hanging the pitcher off a leaf tip (gentle curl). the TOP third is never culled so the
+      // stalk visibly emerges from under the leaf tip = the pitcher reads as attached, not levitating.
+      function buildTendril(matchedOut, solidOut, leafMap, ax, az0, ay, bx, bz, by, matrix, offset, gridSize) {
+        const n = Math.max(4, Math.ceil(Math.hypot(bx - ax, by - ay, bz - az0)) * 2)
+        const seen = new Set()
+        for (let i = 0; i <= n; i++) {
+          const t = i / n, curl = Math.sin(t * Math.PI) * 1.2
+          const x = ax + (bx - ax) * t - curl, y = ay + (by - ay) * t, z = az0 + (bz - az0) * t + curl
+          const col = Math.round(x + offset), row = Math.round(z + offset), yr = Math.round(y)
+          if (t > 0.32 && !leafClear(leafMap, col, row, y)) continue   // keep the attachment run; cull only lower stretches that pierce a leaf
+          // 2-cell-thick stalk (the cell + a neighbour toward the tip-curl side) so the connector reads at this scale
+          for (const [oc, orr] of [[0, 0], [t < 0.5 ? 1 : 0, t < 0.5 ? 0 : 1]]) {
+            const cc = col + oc, rr2 = row + orr, key = cc + ',' + rr2 + ',' + yr
+            if (seen.has(key)) continue; seen.add(key)
+            const onTile = cc >= 0 && rr2 >= 0 && cc < gridSize && rr2 < gridSize
+            solidOut.push({ x: cc - offset, y: yr, z: rr2 - offset, color: onTile ? (matrix[rr2][cc] ? STK_D : STK_L) : STK_L })
+          }
+        }
+      }
+      function build(content) {
+        const matrix = qrMatrixSafe(content, 'M', 9, PIT_DEAD)
+        const gridSize = matrix.length, offset = (gridSize - 1) / 2, sc = gridSize / 33
+        const groundCells = []
+        for (let row = 0; row < gridSize; row++) for (let col = 0; col < gridSize; col++)
+          groundCells.push({ x: col - offset, y: 0, z: row - offset, color: matrix[row][col] ? FLOOR_DARK_C : CREAM_C })
+        let hsh = 2166136261 >>> 0
+        for (let r = 0; r < gridSize; r++) for (let c = 0; c < gridSize; c++) { hsh ^= matrix[r][c] ? 1 : 0; hsh = (hsh * 16777619) >>> 0 }
+        let rs = hsh || 1; const rnd = () => { rs = (rs * 1664525 + 1013904223) >>> 0; return rs / 4294967296 }
+        const S = gridSize * 0.5 - 0.3
+        const potR = 7.0 * sc, potH = Math.max(4, Math.round(10 * sc))   // adequately sized — a touch under frangipani's 7.5/11
+        const potCells = []; buildPot(potCells, potR, potH)
+        // rosette of strappy green leaves: few, distinct (golden angle), out + gently up, fit the square
+        const leaves = [], overhang = [], tips = []
+        const NL = 6 + Math.floor(rnd() * 2)
+        const GOLDEN = 2.39996323, MAX_TILT = 1.7, climbMul = 1.0 + rnd() * 0.4
+        let az = rnd() * Math.PI * 2
+        const defs = []
+        for (let k = 0; k < NL; k++) {
+          az += GOLDEN + (rnd() - 0.5) * 0.4
+          const t = NL > 1 ? k / (NL - 1) : 0
+          defs.push({ az, rc: (1.6 + rnd() * 1.4) * sc, climbH: potH + (5 + t * 16 * climbMul + (rnd() - 0.5) * 2) * sc, size: (9 + t * 2 + rnd() * 2) * sc, rise: (8 + rnd() * 3) * sc, droop: (4 + rnd() * 2) * sc })
+        }
+        for (const d of defs) {
+          const cA = Math.abs(Math.cos(d.az)), sA = Math.abs(Math.sin(d.az))
+          const reach = d.rc + d.size * 2.2, lat = d.size * 0.8
+          const f = Math.min(1.5, S / Math.max(reach * cA + lat * sA, reach * sA + lat * cA))
+          const rc = d.rc * f, size = d.size * f
+          tips.push(buildLeaf(leaves, overhang, { cx: Math.cos(d.az) * rc, cz: Math.sin(d.az) * rc, az: d.az, size, baseH: Math.max(d.climbH, potH + rc / MAX_TILT), rise: d.rise, droop: d.droop }, matrix, offset, gridSize))
+        }
+        const leafCells = [], leafMap = new Map()
+        const mapLeaf = (col, row, H) => { const k = col + ',' + row; (leafMap.get(k) || leafMap.set(k, []).get(k)).push(H) }
+        for (const v of leaves) {
+          const onTile = v.col >= 0 && v.row >= 0 && v.col < gridSize && v.row < gridSize
+          let color
+          if (v.fixed) color = v.color
+          else color = matrix[v.row][v.col] ? LD[v.zone] : LL[v.zone]
+          leafCells.push({ x: v.col - offset, y: v.H, z: v.row - offset, color })
+          mapLeaf(v.col, v.row, v.H)
+        }
+        // register the OFF-TILE overhang leaves too, so pitcher flaps de-intersect against the whole canopy (not just on-tile)
+        for (const v of overhang) mapLeaf(Math.round(v.x + offset), Math.round(v.z + offset), v.y)
+        const matched = [], solid = []
+        const floorY = potH + 2 * sc                     // never sink into the soil
+        // every leaf tip is a candidate, tallest first. the leaf-carve post-pass keeps pitchers solid through any leaf,
+        // so a pitcher only needs to hang below its tip, inside the tile, above the soil — no canopy gymnastics.
+        const allCand = tips.map((tp, i) => ({ tp, laz: defs[i].az, used: false })).sort((a, b) => b.tp.tipH - a.tp.tipH)
+        let placed = 0; const want = 3 + Math.floor(rnd() * 2)   // target 3-4
+        // hang one pitcher off candidate c if a cup of at least minPh fits; returns true on success.
+        const place = (c, minPh) => {
+          if (c.used) return false
+          const { tp, laz } = c
+          const pr0 = (2.8 + rnd() * 1.5) * sc
+          const foot = pr0 + 2.6 * sc                    // lateral half-footprint (body + lid + wings)
+          const rUse = Math.min(Math.hypot(tp.tx, tp.tz), S - foot)   // pull inward only enough to avoid overhang
+          const px = Math.cos(laz) * rUse, pz = Math.sin(laz) * rUse
+          const topExtra = 2.5 * sc + 0.93 * pr0         // neck + raised-lid rise above the cup top
+          const topCap = tp.tipH - 5 * sc                // hang below the parent tip
+          const phMax = topCap - floorY - topExtra
+          if (phMax < minPh) return false
+          const ph = Math.min(Math.round((13 + rnd() * 4) * sc), Math.floor(phMax))
+          const pr = Math.min(pr0, 0.30 * ph)            // OBLONG (~2:1): clamp width to (possibly capped) height
+          const baseY = Math.max(floorY, topCap - ph - topExtra)
+          buildPitcher(matched, solid, leafMap, px, pz, baseY, ph, pr, laz, matrix, offset, gridSize)
+          buildTendril(matched, solid, leafMap, tp.tx, tp.tz, tp.tipH, px - Math.cos(laz) * bodyR(pr, 1), pz - Math.sin(laz) * bodyR(pr, 1), baseY + ph, matrix, offset, gridSize)
+          c.used = true; placed++; return true
+        }
+        // pass 1 — up to `want` nicely-sized pitchers off the outer tips
+        for (const c of allCand) { if (placed >= want) break; if (Math.hypot(c.tp.tx, c.tp.tz) > S * 0.34) place(c, 7 * sc) }
+        // GUARANTEE at least 2 — relax the height (then position) until two are hung
+        for (const c of allCand) { if (placed >= 2) break; if (Math.hypot(c.tp.tx, c.tp.tz) > S * 0.30) place(c, 4 * sc) }
+        for (const c of allCand) { if (placed >= 2) break; place(c, 2 * sc) }
+        // LEAF-CARVE post-pass — the leaves de-intersect against the pitchers: any leaf cell sitting inside a pitcher's
+        // vertical column (within its occupied y-range) is removed, so the solid pitcher reads in FRONT of the foliage
+        // and no leaf slices through it. carve a 1-cell margin so the leaf stops just shy of the pitcher surface.
+        const pitCol = new Map()   // "col,row" -> [minY, maxY] occupied by any pitcher cell
+        for (const c of matched.concat(solid)) {
+          const k = Math.round(c.x + offset) + ',' + Math.round(c.z + offset), r = pitCol.get(k)
+          if (!r) pitCol.set(k, [c.y, c.y]); else { if (c.y < r[0]) r[0] = c.y; if (c.y > r[1]) r[1] = c.y }
+        }
+        const insidePitcher = (col, row, y) => { const r = pitCol.get(col + ',' + row); return r && y >= r[0] - 1 && y <= r[1] + 1 }
+        const leafKept = leafCells.filter(c => !insidePitcher(Math.round(c.x + offset), Math.round(c.z + offset), c.y))
+        const overhangKept = overhang.filter(c => !insidePitcher(Math.round(c.x + offset), Math.round(c.z + offset), c.y))
+        let maxR = 0, maxY = 0
+        for (const v of leaves) { const r = Math.hypot(v.col - offset, v.row - offset); if (r > maxR) maxR = r; if (v.H > maxY) maxY = v.H }
+        for (const c of matched.concat(solid)) { const r = Math.hypot(c.x, c.z); if (r > maxR) maxR = r; if (c.y > maxY) maxY = c.y }
+        if (potR > maxR) maxR = potR
+        return {
+          groups: [
+            { cells: groundCells, fade: false, sway: false },
+            { cells: potCells, fade: false, sway: false },
+            { cells: solid, fade: false, sway: true },    // pitchers + tendrils sway WITH the plant (same pot-centre pivot → attachment holds)
+            { cells: matched, fade: false, sway: true },
+            { cells: leafKept, fade: false, sway: true },
+            { cells: overhangKept, fade: true, sway: true }
+          ],
+          view: { span: gridSize, maxR, maxY, spanK: 0.6, radK: 0.84, heightK: 0.66, focusK: 0.46 }
+        }
+      }
+      return { build }
+    })()
+
+    // ======================================================================
+    // model registry
+    // ======================================================================
+    const MODELS = {
+      'caladium-h': { accent: '#c24d77', bg: '#f7f1f3', grow: 'grow caladium', seasons: false, build: c => CAL.build(c, 'H') },
+      'caladium-m': { accent: '#c24d77', bg: '#f7f1f3', grow: 'grow caladium', seasons: false, build: c => CAL.build(c, 'M') },
+      'pine':       { accent: '#4a7c4e', bg: '#f2f5f2', grow: 'grow pine',     seasons: true,  build: (c, v) => PINE.build(c, v) },
+      'frangipani': { accent: '#c98a2e', bg: '#f6f2ea', grow: 'grow frangipani', seasons: false, build: c => FRANGI.build(c) },
+      'pitcher':    { accent: '#7a8f3a', bg: '#f1f3ec', grow: 'grow pitcher', seasons: false, build: c => PITCHER.build(c) }
+    }
+
+    // ======================================================================
+    // scene — one renderer / camera / loop for every model
+    // ======================================================================
+    const app = document.getElementById('app')
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.setSize(window.innerWidth, Math.max(1, window.innerHeight - 56))
+    renderer.outputColorSpace = THREE.SRGBColorSpace
+    app.appendChild(renderer.domElement)
+
+    const scene = new THREE.Scene()
+    scene.background = new THREE.Color(MODELS['caladium-h'].bg)
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 8000) // ortho keeps lifted voxels on their footprint top-down
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xa6a8a6, 1.02))
+    const sun = new THREE.DirectionalLight(0xffffff, 1.18)
+    sun.position.set(-11, 29, 11)
+    scene.add(sun)
+
+    const cubeGeo = new THREE.BoxGeometry(CUBE, CUBE, CUBE)
+    const solidMat = new THREE.MeshStandardMaterial({ roughness: 0.88, flatShading: true })          // ground + the plant body (the QR)
+    const fadeMat = new THREE.MeshStandardMaterial({ roughness: 0.9, flatShading: true, transparent: true, opacity: 1 }) // pot/trunk/overhang — fade when flat
+    const obj = new THREE.Object3D()
+
+    let meshes = []          // { mesh, sway }
+    let view = null
+    let currentModel = 'caladium-h'
+    let variant = 'forest'
+
+    function makeMesh(cells, mat) {
+      const mesh = new THREE.InstancedMesh(cubeGeo, mat, cells.length)
+      for (let i = 0; i < cells.length; i++) {
+        const b = cells[i]
+        obj.position.set(b.x, b.y + CUBE / 2, b.z)
+        obj.updateMatrix(); mesh.setMatrixAt(i, obj.matrix)
+        mesh.setColorAt(i, b.color)
+      }
+      mesh.instanceMatrix.needsUpdate = true
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+      return mesh
+    }
+
+    function rebuild() {
+      const data = MODELS[currentModel].build(input.value || DEFAULT_CONTENT, variant)
+      view = data.view
+      for (const m of meshes) { scene.remove(m.mesh); m.mesh.dispose() }
+      meshes = []
+      for (const g of data.groups) {
+        if (!g.cells.length) continue
+        const mesh = makeMesh(g.cells, g.fade ? fadeMat : solidMat)
+        scene.add(mesh); meshes.push({ mesh, sway: g.sway })
+      }
+    }
+
+    // ---- camera: flat ↔ iso morph + drag orbit ----------------------------
+    let t = 0, target = 1
+    let az = 0.7, el = 0.61
+    // site-v6 test hook, inert in normal use: ?az=<rad>&el=<rad> sets the starting orbit once at start-up (nothing else reads them)
+    { const q = new URLSearchParams(location.search), qa = parseFloat(q.get('az')), qe = parseFloat(q.get('el'))
+      if (isFinite(qa)) az = qa
+      if (isFinite(qe)) el = Math.max(0.2, Math.min(Math.PI / 2, qe)) }
+    let exporting = false
+    let topInset = 0, viewW = window.innerWidth, viewH = Math.max(1, window.innerHeight - 56) // live canvas size: the window above the bottom strip
+    const pos = new THREE.Vector3(), tgt = new THREE.Vector3(), dir = new THREE.Vector3(), up = new THREE.Vector3(), upTop = new THREE.Vector3()
+    const UP_FLAT = new THREE.Vector3(0, 0, -1), UP_ISO = new THREE.Vector3(0, 1, 0)
+    function easeInOut(x) { return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2 }
+    function fadeOpacity(e) { return 1 } // top-down is an honest projection of the 3D: pot/trunk/overhang always present, no fade/morph
+
+    // place an ortho camera for a grow amount e (0 flat → 1 iso), azimuth and viewport aspect.
+    // shared by the live loop and the export renderer so what you record matches what you see (except the v5 overhead framing, which is live only).
+    // site-v6: how far the view is into straight overhead, 0 (orbiting, el 1.2 rad or lower) to 1 (el 1.55 rad, one degree short
+    // of the top). it drives only the sway fade and the zoom-out guard below, never the scale of the plant itself.
+    function overheadK(e) {
+      const k = Math.max(0, Math.min(1, (el - 1.2) / 0.35)) // from the resting orbit, so grow and flatten keep the v4 motion
+      return e * k * k * (3 - 2 * k)
+    }
+    // live = true only for the on-screen camera; the exports keep the v4 framing, so their frames do not change.
+    function applyCamera(cam, e, azv, aspect, live) {
+      const span = view.span
+      // +4 modules of quiet zone on the tight axis so coarse (level-M) codes still anchor their finders
+      const flatHalf = Math.max(span * 0.5 + 4, span / (2 * aspect)) * 1.06
+      const isoHalf = Math.max(span * view.spanK, view.maxR * view.radK, view.maxY * view.heightK) * 1.1
+      let halfH = flatHalf + (isoHalf - flatHalf) * e
+      if (live) {
+        // site-v6: the plant keeps its size on screen all the way to straight overhead. the one exception is a view where the
+        // code with the flat view's fit (4 modules of quiet zone on the tight axis, 6% margin), turned to the current azimuth (reach |cos| + |sin| times its side), would run past
+        // the canvas: the frame then zooms OUT just enough to hold it, easing in with elevation (el 1.2 to 1.55 rad). never zooms in.
+        const f = Math.abs(Math.cos(azv * e)) + Math.abs(Math.sin(azv * e))
+        const need = Math.max((span * 0.5 + 4) * f, span * f / (2 * aspect)) * 1.06 // the flat view's own fit, turned by f
+        halfH += Math.max(0, need - halfH) * overheadK(e)
+      }
+      cam.top = halfH; cam.bottom = -halfH; cam.left = -halfH * aspect; cam.right = halfH * aspect
+      cam.updateProjectionMatrix()
+      const elNow = (Math.PI / 2) * (1 - e) + el * e
+      const azNow = azv * e
+      dir.set(Math.cos(elNow) * Math.sin(azNow), Math.sin(elNow), Math.cos(elNow) * Math.cos(azNow))
+      up.copy(UP_FLAT).lerp(UP_ISO, e).normalize()
+      // site-v4: the drag reaches straight overhead. there the world up is parallel to the view, so near the top
+      // the camera's own orbit up takes over (the same picture below 1.2 rad, where nothing changes)
+      const kTop = e * Math.max(0, Math.min(1, (elNow - 1.2) / (Math.PI / 2 - 1.2)))
+      if (kTop > 0) {
+        upTop.set(-Math.sin(elNow) * Math.sin(azNow), Math.cos(elNow), -Math.sin(elNow) * Math.cos(azNow))
+        up.lerp(upTop, kTop).normalize()
+      }
+      tgt.set(0, view.maxY * view.focusK * e, 0)
+      pos.copy(dir).multiplyScalar(span * 6).add(tgt)
+      cam.position.copy(pos); cam.up.copy(up); cam.lookAt(tgt)
+    }
+
+    function frame(now) {
+      if (exporting) { requestAnimationFrame(frame); return } // export drives the scene; pause the live loop
+      t += (target - t) * 0.10
+      if (Math.abs(target - t) < 0.0004) t = target
+      const e = easeInOut(t)
+      applyCamera(camera, e, az, viewW / (viewH - topInset), true)
+      if (topInset) { // phones: fit the plant in the room below the title block, canvas stays full height (frustum scaled and shifted)
+        const k = viewH / (viewH - topInset), d = topInset * camera.top / (viewH - topInset)
+        camera.top = camera.top * k + d; camera.bottom = camera.bottom * k + d
+        // site-v6: left and right stay at halfH * aspect (aspect already uses the room below the title), so a square draws square
+        camera.updateProjectionMatrix()
+      }
+      // fade material fades to nothing when flat → clean square QR; sway × e → 0 at rest so the match holds
+      fadeMat.opacity = fadeOpacity(e)
+      const tm = now / 1000
+      // site-v6: the sway shears the plant sideways, which smears the code; it fades out over el 1.2 to 1.55 rad (smoothstep), zero at the top
+      const sw = e * (1 - overheadK(e))
+      const sz = Math.sin(tm * 1.0) * 0.012 * sw, sx = Math.cos(tm * 0.8) * 0.008 * sw
+      for (const m of meshes) if (m.sway) { m.mesh.rotation.z = sz; m.mesh.rotation.x = sx }
+      renderer.render(scene, camera)
+      requestAnimationFrame(frame)
+    }
+
+    // ---- interaction ------------------------------------------------------
+    const btn = document.getElementById('toggle')
+    const input = document.getElementById('content')
+    const plantSeg = document.getElementById('plantSeg')
+    const loading = document.getElementById('loading')
+    input.value = DEFAULT_CONTENT
+
+    // the toggle is an icon: its name goes to aria-label and title, its state picks the icon
+    function nameToggle(m) {
+      const name = target === 1 ? 'flatten to QR' : m.grow
+      btn.dataset.state = target === 1 ? 'grown' : 'flat'
+      btn.setAttribute('aria-label', name); btn.title = name
+    }
+    function toggle() {
+      target = target === 0 ? 1 : 0
+      if (target === 0) az = Math.atan2(Math.sin(az), Math.cos(az)) // un-spin the shortest way back to top-down
+      nameToggle(MODELS[currentModel])
+    }
+    btn.addEventListener('click', toggle)
+
+    let dragging = false, lastX = 0, lastY = 0, moved = 0
+    const cv = renderer.domElement
+    cv.addEventListener('pointerdown', ev => { dragging = true; lastX = ev.clientX; lastY = ev.clientY; moved = 0; cv.setPointerCapture(ev.pointerId) })
+    cv.addEventListener('pointermove', ev => {
+      if (!dragging) return
+      const dx = ev.clientX - lastX, dy = ev.clientY - lastY
+      lastX = ev.clientX; lastY = ev.clientY; moved += Math.abs(dx) + Math.abs(dy)
+      az -= dx * 0.006
+      el = Math.max(0.2, Math.min(Math.PI / 2, el + dy * 0.005))
+    })
+    cv.addEventListener('pointerup', () => {
+      if (!dragging) return
+      dragging = false
+      if (moved < 6) { toggle(); return }
+    })
+
+    function applyTheme(m) {
+      // site-v1: the interface is one fixed grey (--surface), so --accent, --bg and theme-color are no longer written.
+      // scene.background is the scene's own ground: the exports render the same scene, so their quiet zone and footer
+      // colour come from it. it stays per plant, exactly as in botanical-qr.html.
+      scene.background.set(m.bg)
+    }
+
+    // one row, four presets: caladium fine/bold (error-correction H/M) and pine forest/snow.
+    // each button carries its model and (for pine) its season; season is irrelevant to caladium.
+    plantSeg.addEventListener('click', ev => {
+      const b = ev.target.closest('button'); if (!b) return
+      currentModel = b.dataset.model
+      if (b.dataset.season) variant = b.dataset.season
+      const m = MODELS[currentModel]
+      plantSeg.querySelectorAll('button').forEach(x => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on) })
+      applyTheme(m)
+      nameToggle(m)
+      rebuild()
+    })
+
+    // ---- export: a scannable still + a top-down → grow → orbit → flatten loop ----
+    const saveBtn = document.getElementById('saveBtn')
+    const saveMenu = document.getElementById('saveMenu')
+    const recOverlay = document.getElementById('recOverlay')
+    const recBar = document.getElementById('recBar')
+    const recFill = recBar.querySelector('i')
+    function setProg(frac) { recBar.classList.remove('indet'); recFill.style.width = (Math.max(0, Math.min(1, frac)) * 100) + '%' }
+    let exportRenderer = null, exportCamera = null, compositor = null, compCtx = null
+    const EXPORT_SIZE = 1080
+    const FOOTER_H = 168                       // signature band below the code; the QR keeps its full quiet zone above
+    const PZ_LOGO = 'data:image/png;base64,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'
+    const logoImg = new Image(); logoImg.src = PZ_LOGO
+    const pageMark = document.getElementById('pageMark'); if (pageMark) pageMark.src = PZ_LOGO // on-page signature reuses the embedded logo
+
+    function ensureExport() {
+      if (exportRenderer) return
+      exportRenderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })
+      exportRenderer.setPixelRatio(1)
+      exportRenderer.setSize(EXPORT_SIZE, EXPORT_SIZE, false)
+      exportRenderer.outputColorSpace = THREE.SRGBColorSpace
+      exportCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 8000)
+      // a 2D compositor is the on-screen, captured surface: it boosts contrast on the flat (scannable) frames
+      // so coarse level-M codes still decode, while the 3D orbit stays natural. captureStream reads it.
+      compositor = document.createElement('canvas'); compositor.width = EXPORT_SIZE; compositor.height = EXPORT_SIZE + FOOTER_H
+      compCtx = compositor.getContext('2d')
+      recOverlay.insertBefore(compositor, recBar)
+    }
+    function clearSway() { for (const m of meshes) { m.mesh.rotation.z = 0; m.mesh.rotation.x = 0 } }
+    function download(href, name) { const a = document.createElement('a'); a.href = href; a.download = name; document.body.appendChild(a); a.click(); a.remove() }
+
+    // embed authorship as PNG tEXt chunks (invisible, but provable) — inserted right after IHDR
+    const CRC_TABLE = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); t[n] = c >>> 0 } return t })()
+    function crc32(b) { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC_TABLE[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0 }
+    function textChunk(keyword, text) {
+      const body = []
+      for (let i = 0; i < keyword.length; i++) body.push(keyword.charCodeAt(i) & 0xFF)
+      body.push(0)
+      for (let i = 0; i < text.length; i++) body.push(text.charCodeAt(i) & 0xFF)
+      const type = [116, 69, 88, 116] // 'tEXt'
+      const typed = new Uint8Array(type.concat(body))      // crc covers type + data
+      const out = new Uint8Array(12 + body.length)
+      const dv = new DataView(out.buffer)
+      dv.setUint32(0, body.length); out.set(type, 4); out.set(body, 8); dv.setUint32(8 + body.length, crc32(typed))
+      return out
+    }
+    function pngWithText(dataURL, fields) {
+      const bin = atob(dataURL.split(',')[1]); const png = new Uint8Array(bin.length)
+      for (let i = 0; i < bin.length; i++) png[i] = bin.charCodeAt(i)
+      const at = 33 // 8 sig + IHDR(4 len + 4 type + 13 data + 4 crc)
+      const chunks = Object.entries(fields).map(([k, v]) => textChunk(k, v))
+      const extra = chunks.reduce((n, c) => n + c.length, 0)
+      const out = new Uint8Array(png.length + extra)
+      out.set(png.subarray(0, at), 0)
+      let off = at
+      for (const c of chunks) { out.set(c, off); off += c.length }
+      out.set(png.subarray(at), off)
+      return new Blob([out], { type: 'image/png' })
+    }
+    // filenames read plant · qr · site, e.g. caladium-h-qr-pynzhern-com-loop.gif
+    function exportSlug() {
+      let s = (input.value || DEFAULT_CONTENT).trim().replace(/^https?:\/\//i, '').replace(/^www\./i, '')
+      s = s.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase()
+      return s.slice(0, 40) || 'qr'
+    }
+    function exportTag() { return currentModel === 'pine' ? `pine-${variant}` : currentModel }
+    function exportName(suffix, ext) { return `${exportTag()}-qr-${exportSlug()}${suffix}.${ext}` }
+    // render one export frame (square, no HUD) into the compositor; contrast is full at flat (e=0), none in iso (e=1)
+    // only the low-contrast designs need a contrast lift to stay scannable as a standalone image; the rest
+    // export exactly as shown on screen. boost applies at flat (e=0) and ramps to none by iso (e=1).
+    function exportBoost() {
+      if (currentModel === 'pine') return variant === 'snow' ? 2.0 : 1.0 // snow + the footer logo is the worst case
+      if (currentModel === 'caladium-m') return 1.5
+      return 1.0 // caladium-h, pine forest — scan raw, no boost → saved == on-screen
+    }
+    function renderExportFrame(e, azv, kOverride) {
+      ensureExport(); clearSway()
+      fadeMat.opacity = fadeOpacity(e)
+      applyCamera(exportCamera, e, azv, 1)
+      exportRenderer.render(scene, exportCamera)
+      const K = kOverride != null ? kOverride : 1 + (exportBoost() - 1) * (1 - Math.max(0, Math.min(1, e)))
+      compCtx.clearRect(0, 0, compositor.width, compositor.height)
+      compCtx.filter = `contrast(${Math.round(K * 100)}%)`
+      compCtx.drawImage(exportRenderer.domElement, 0, 0, EXPORT_SIZE, EXPORT_SIZE) // the code (square)
+      compCtx.filter = 'none'
+      // footer: match it to the (boosted) quiet-zone colour so there's no seam, then drop the signature in
+      const q = compCtx.getImageData(6, 6, 1, 1).data
+      compCtx.fillStyle = `rgb(${q[0]},${q[1]},${q[2]})`
+      compCtx.fillRect(0, EXPORT_SIZE, compositor.width, FOOTER_H)
+      if (logoImg.complete && logoImg.naturalWidth) {
+        const lw = EXPORT_SIZE * 0.19, lh = lw * (logoImg.naturalHeight / logoImg.naturalWidth)
+        compCtx.globalAlpha = 0.72
+        compCtx.drawImage(logoImg, (EXPORT_SIZE - lw) / 2, EXPORT_SIZE + (FOOTER_H - lh) / 2, lw, lh)
+        compCtx.globalAlpha = 1
+      }
+    }
+
+    function savePng() {
+      renderExportFrame(0, 0) // flat top-down → the scannable still
+      const blob = pngWithText(compositor.toDataURL('image/png'), {
+        Copyright: '(c) Khoo Pyn Zhern, pynzhern.com'
+      })
+      const url = URL.createObjectURL(blob)
+      download(url, exportName('', 'png'))
+      setTimeout(() => URL.revokeObjectURL(url), 5000)
+    }
+
+    // capture timeline: hold flat → grow → hold grown → ease a full 360° spin → hold grown → flatten → hold flat.
+    // the spin eases in and out of rest (no abrupt start/stop) and is bracketed by short stills, so the loop
+    // breathes instead of snapping into the orbit. the longer flat holds also give the video a clear cover frame.
+    // endpoints are the identical flat frame and the spin lands back at az 0 (≡ 2π), so the clip still loops
+    // seamlessly with no extra un-spin on the flatten.
+    const EXP = { holdA: 0.5, grow: 1.1, holdGrownIn: 0.4, orbit: 3.4, holdGrownOut: 0.4, flat: 1.1, holdB: 0.5 }
+    const EXP_DUR = EXP.holdA + EXP.grow + EXP.holdGrownIn + EXP.orbit + EXP.holdGrownOut + EXP.flat + EXP.holdB
+    function exportState(s) {
+      if (s < EXP.holdA) return [0, 0]; s -= EXP.holdA
+      if (s < EXP.grow) return [easeInOut(s / EXP.grow), 0]; s -= EXP.grow
+      if (s < EXP.holdGrownIn) return [1, 0]; s -= EXP.holdGrownIn       // rest, fully grown, before the spin
+      if (s < EXP.orbit) return [1, 2 * Math.PI * easeInOut(s / EXP.orbit)]; s -= EXP.orbit  // eased spin: rest → 360° → rest
+      if (s < EXP.holdGrownOut) return [1, 0]; s -= EXP.holdGrownOut     // rest, fully grown, after the spin (az 2π ≡ 0)
+      if (s < EXP.flat) return [easeInOut(1 - s / EXP.flat), 0]          // az = 0 here, NOT 2π → clean tilt-down, no spin
+      return [0, 0]
+    }
+    function pickMime() {
+      const c = ['video/mp4;codecs=avc1.42E01E', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4']
+      for (const t of c) if (window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t
+      return ''
+    }
+    const canRecord = typeof HTMLCanvasElement.prototype.captureStream === 'function' && !!window.MediaRecorder && !!pickMime()
+    const mp4Item = saveMenu.querySelector('[data-act="mp4"]')
+    if (!canRecord) { mp4Item.disabled = true; mp4Item.title = 'video capture is not supported in this browser' }
+
+    function setBusy(on, label) {
+      saveBtn.disabled = on; btn.disabled = on
+      plantSeg.querySelectorAll('button').forEach(b => b.disabled = on)
+      if (on) closeMenu()
+      // recording/encoding status is shown by the progress bar, not text
+    }
+
+    function recordLoop() {
+      if (!canRecord) return
+      ensureExport(); clearSway()
+      exporting = true; recOverlay.classList.add('on'); setBusy(true); setProg(0)
+      const mime = pickMime()
+      const stream = compositor.captureStream(60)
+      const chunks = []
+      const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8000000 })
+      rec.ondataavailable = ev => { if (ev.data && ev.data.size) chunks.push(ev.data) }
+      // paint the flat QR before capture begins so the video's first/cover frame is the
+      // scannable code, not a stale or blank compositor frame
+      renderExportFrame(0, 0)
+      rec.onstop = () => {
+        const blob = new Blob(chunks, { type: mime })
+        const ext = mime.includes('mp4') ? 'mp4' : 'webm'
+        const url = URL.createObjectURL(blob)
+        download(url, exportName('-loop', ext))
+        setTimeout(() => URL.revokeObjectURL(url), 5000)
+        recOverlay.classList.remove('on'); exporting = false; setBusy(false)
+      }
+      rec.start()
+      const start = performance.now()
+      function step(now) {
+        const s = (now - start) / 1000
+        const [e, azv] = exportState(Math.min(s, EXP_DUR))
+        renderExportFrame(e, azv)
+        setProg(s / EXP_DUR)
+        if (s < EXP_DUR) requestAnimationFrame(step)
+        else rec.stop()
+      }
+      requestAnimationFrame(step)
+    }
+
+    // ---- GIF export: same loop, encoded client-side (loops inline everywhere a video won't) ----
+    const GIF_SIZE = 480, GIF_FPS = 24 // 24 = cinematic standard: smooth to the eye, lighter than 30 to encode/download
+    const GIF_H = Math.round(GIF_SIZE * (EXPORT_SIZE + FOOTER_H) / EXPORT_SIZE)
+    let GIFlib = null, gifWorkerURL = null, gifScratch = null, gifScratchCtx = null
+    async function ensureGifLib() {
+      if (GIFlib) return
+      if (!window.GIF) {
+        await new Promise((res, rej) => {
+          const s = document.createElement('script')
+          s.src = 'https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js'
+          s.onload = res; s.onerror = () => rej(new Error('gif.js load failed'))
+          document.head.appendChild(s)
+        })
+      }
+      GIFlib = window.GIF
+      const resp = await fetch('https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js') // blob worker → no cross-origin worker error
+      gifWorkerURL = URL.createObjectURL(await resp.blob())
+    }
+    async function saveGif() {
+      ensureExport(); clearSway()
+      exporting = true; recOverlay.classList.add('on'); setBusy(true); recBar.classList.add('indet')
+      try { await ensureGifLib() }
+      catch (e) { recOverlay.classList.remove('on'); exporting = false; setBusy(false); alert('could not load the gif encoder (offline?)'); return }
+      if (!gifScratch) { gifScratch = document.createElement('canvas'); gifScratch.width = GIF_SIZE; gifScratch.height = GIF_H; gifScratchCtx = gifScratch.getContext('2d') }
+      const gif = new GIFlib({ workers: 4, quality: 8, width: GIF_SIZE, height: GIF_H, workerScript: gifWorkerURL, repeat: 0 })
+      const frames = Math.round(EXP_DUR * GIF_FPS)
+      for (let i = 0; i < frames; i++) {
+        const [e, azv] = exportState(Math.min(i / GIF_FPS, EXP_DUR))
+        renderExportFrame(e, azv)
+        gifScratchCtx.clearRect(0, 0, GIF_SIZE, GIF_H)
+        gifScratchCtx.drawImage(compositor, 0, 0, GIF_SIZE, GIF_H)
+        gif.addFrame(gifScratchCtx, { copy: true, delay: Math.round(1000 / GIF_FPS) })
+        // yield every frame so the capture overlay repaints smoothly (matches the mp4 preview),
+        // not every 4th (which looked choppy on screen even though the saved file was fine)
+        setProg(0.5 * i / frames)
+        await new Promise(r => requestAnimationFrame(r))
+      }
+      gif.on('progress', p => setProg(0.5 + 0.5 * p))
+      gif.on('finished', blob => {
+        download(URL.createObjectURL(blob), exportName('-loop', 'gif'))
+        recOverlay.classList.remove('on'); exporting = false; setBusy(false)
+      })
+      gif.render()
+    }
+
+    // ---- about popover + save menu ----
+    const aboutBtn = document.getElementById('aboutBtn')
+    const aboutCard = document.getElementById('aboutCard')
+    function closeMenu() { saveMenu.classList.remove('open'); saveBtn.setAttribute('aria-expanded', 'false') }
+    saveBtn.addEventListener('click', ev => {
+      ev.stopPropagation()
+      const open = saveMenu.classList.toggle('open'); saveBtn.setAttribute('aria-expanded', String(open))
+      aboutCard.classList.remove('open')
+    })
+    saveMenu.addEventListener('click', ev => {
+      ev.stopPropagation()
+      const b = ev.target.closest('button'); if (!b || b.disabled) return
+      closeMenu()
+      const act = b.dataset.act
+      if (act === 'png') savePng(); else if (act === 'mp4') recordLoop(); else if (act === 'gif') saveGif()
+    })
+    aboutBtn.addEventListener('click', ev => {
+      ev.stopPropagation()
+      const open = aboutCard.classList.toggle('open'); aboutBtn.setAttribute('aria-expanded', String(open))
+      closeMenu()
+    })
+    aboutCard.addEventListener('click', ev => ev.stopPropagation())
+    document.addEventListener('click', () => { closeMenu(); aboutCard.classList.remove('open') })
+    document.addEventListener('keydown', ev => { if (ev.key === 'Escape') { closeMenu(); aboutCard.classList.remove('open') } })
+
+    // small hook for embedding / testing: grab a square frame as a PNG data URL (k overrides the contrast boost)
+    window.qrBotanical = { frame: (e, azv, k) => { renderExportFrame(e || 0, azv || 0, k); return compositor.toDataURL('image/png') } }
+
+    let debounce = null
+    input.addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(rebuild, 250) })
+    // the canvas fills the window above the bottom strip (its height is measured: two rows on narrow screens), so the
+    // existing camera fit centres the plant in the room that is left. the v5 overhead framing in applyCamera is the one change.
+    const dockEl = document.getElementById('dock')
+    function fitView() {
+      const h = dockEl.offsetHeight
+      document.documentElement.style.setProperty('--strip-h', h + 'px')
+      viewW = app.clientWidth; viewH = Math.max(1, app.clientHeight)
+      topInset = window.innerWidth <= 720 ? Math.round(document.querySelector('.brand').getBoundingClientRect().bottom + 6) : 0
+      renderer.setSize(viewW, viewH)
+    }
+    fitView()
+    window.addEventListener('resize', fitView)
+    if (window.ResizeObserver) new ResizeObserver(fitView).observe(dockEl)
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitView)
+
+    rebuild()
+    loading.classList.add('gone')
+    setTimeout(() => loading.remove(), 500)
+    requestAnimationFrame(frame)
+  </script>
+</body>
+</html>
